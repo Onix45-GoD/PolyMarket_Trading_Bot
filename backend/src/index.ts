@@ -8,7 +8,7 @@ import { apiRouter } from "./api/routes.js";
 import { startWebSocketServer, stopWebSocketServer } from "./api/websocketServer.js";
 import { startMarketDataService, stopMarketDataService } from "./market_data/marketDataService.js";
 import { startBtcPriceFeed, stopBtcPriceFeed } from "./btc_price/btcPriceFeed.js";
-import { startBotEngine, stopBotEngine } from "./bot/botEngine.js";
+import { bootBotEngine, stopBotEngine } from "./bot/botEngine.js";
 
 const app = express();
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((o) => o.trim());
@@ -32,7 +32,7 @@ const server = app.listen(env.API_PORT, env.API_HOST, async () => {
   startWebSocketServer();
   startBtcPriceFeed();
   await startMarketDataService();
-  startBotEngine();
+  bootBotEngine();
 });
 
 async function shutdown(): Promise<void> {

@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import { findActiveBtcUpDownMarket } from "../market_discovery/btcMarketFinder.js";
 import { getManualMarket } from "../market_discovery/manualMarket.js";
@@ -67,7 +68,10 @@ async function refreshMarket(): Promise<void> {
       gammaError: null,
     });
     if (prev !== manual.conditionId) {
-      console.log(`[market] Using manual config: ${manual.question}`);
+      console.log(`[market] Manual window: ${manual.question}`);
+      console.log(
+        `[market]   UP: ${manual.upTokenId} | DOWN: ${manual.downTokenId}`,
+      );
     }
     discoveryBackoffMs = MIN_DISCOVERY_MS;
     return;
@@ -80,12 +84,16 @@ async function refreshMarket(): Promise<void> {
       systemState.patchMarket({ market: found });
       systemState.patchConnectivity({ gamma: "ok", gammaError: null });
       if (prev !== found.conditionId) {
-        console.log(`[market] Active: ${found.question}`);
+        console.log(`[market] New window: ${found.question}`);
+        console.log(`[market]   slug: ${found.slug}`);
+        console.log(
+          `[market]   end: ${found.endDate} | UP: ${found.upTokenId} | DOWN: ${found.downTokenId}`,
+        );
       }
     } else {
       systemState.patchConnectivity({
         gamma: "empty",
-        gammaError: "No active BTC up/down market found",
+        gammaError: `No active ${env.BTC_UPDOWN_SLUG_PREFIX} market found`,
       });
     }
     discoveryBackoffMs = MIN_DISCOVERY_MS;

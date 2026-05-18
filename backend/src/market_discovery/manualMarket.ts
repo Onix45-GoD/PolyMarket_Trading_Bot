@@ -11,12 +11,17 @@ export function getManualMarket(): ActiveMarket | null {
     env.MANUAL_MARKET_END_DATE?.trim() ||
     new Date(Date.now() + 5 * 60_000).toISOString();
 
+  const windowMinutes = env.MANUAL_WINDOW_MINUTES ?? 5;
+  const endMs = new Date(end).getTime();
+  const windowStartUnix = Math.floor(endMs / 1000) - windowMinutes * 60;
+
   return {
     conditionId: env.MANUAL_CONDITION_ID?.trim() || "manual",
     question:
       env.MANUAL_MARKET_QUESTION?.trim() || "BTC Up/Down (manual config)",
     slug: "manual",
-    windowMinutes: env.MANUAL_WINDOW_MINUTES ?? 5,
+    windowMinutes,
+    windowStartUnix,
     endDate: end,
     upTokenId: up,
     downTokenId: down,

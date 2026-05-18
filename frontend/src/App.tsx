@@ -1,28 +1,42 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  type AppConfig,
   botPause,
   botStart,
   botStop,
   cancelAllOrders,
   connectWs,
+  fetchConfig,
+  fetchHistory,
   fetchState,
+  resetVirtualBalance,
   setBotMode,
 } from "./api/client";
-import type { SystemSnapshot } from "./types";
-
-function fmt(n: number | null | undefined, digits = 2): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return n.toFixed(digits);
-}
+import type { BotStatus, SystemSnapshot } from "./types";
+import { botStatusLabel, fmt, fmtUsd, shortAddr } from "./utils/format";
+import {
+  history24hSummary,
+  pairCost,
+  pnlIfSideWins,
+  windowProgress,
+} from "./utils/metrics";
 
 export default function App() {
   const [snap, setSnap] = useState<SystemSnapshot | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [killSwitch, setKillSwitch] = useState(false);
+  const [autoBuy, setAutoBuy] = useState(false);
+  const [manualSide, setManualSide] = useState<"UP" | "DOWN">("UP");
+  const [manualShares, setManualShares] = useState(10);
+  const [uptimeSec, setUptimeSec] = useState(0);
+  const [sessionStart] = useState(() => Date.now());
 
   const refresh = useCallback(async () => {
     try {
-      const data = await fetchState();
+      const [data, cfg] = await Promise.all([fetchState(), fetchConfig()]);
       setSnap(data);
+      setConfig(cfg);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
@@ -32,168 +46,501 @@ export default function App() {
   useEffect(() => {
     refresh();
     const off = connectWs(setSnap);
-    const id = setInterval(refresh, 10_000);
+    const poll = setInterval(refresh, 5000);
+    const uptime = setInterval(() => {
+      setUptimeSec(Math.floor((Date.now() - sessionStart) / 1000));
+    }, 1000);
     return () => {
       off();
-      clearInterval(id);
+      clearInterval(poll);
+      clearInterval(uptime);
     };
-  }, [refresh]);
+  }, [refresh, sessionStart]);
 
   const m = snap?.market;
   const bot = snap?.bot;
   const conn = snap?.connectivity ?? m?.connectivity;
+  const isVirtual = bot?.mode === "dry-run";
+  const botStatus = (bot?.status ?? "stopped") as BotStatus;
+  const isRunning = botStatus === "running" && Boolean(bot?.enabled);
+  const market = m?.market;
+  const win = windowProgress(market ?? null);
+  const pc = pairCost(snap);
+  const virtualBal = snap?.virtualAccount;
+  const totalValue = isVirtual
+    ? (virtualBal?.balanceUsd ?? 0) + (snap?.position.exposureUsd ?? 0)
+    : (snap?.position.exposureUsd ?? 0);
 
   const connError =
     conn?.gammaError ||
     conn?.clobError ||
     (conn?.gamma === "error" ? "Gamma API unreachable" : null);
 
+  const upShares = snap?.position.upShares ?? 0;
+  const downShares = snap?.position.downShares ?? 0;
+  const unmatched = Math.abs(upShares - downShares);
+  const matched = Math.min(upShares, downShares);
+  const matchedProfit =
+    pc != null && matched > 0 ? matched * (1 - pc) : null;
+
+  const histSummary = useMemo(
+    () => history24hSummary(snap?.orders ?? []),
+    [snap?.orders],
+  );
+
+  const handleBotStart = async () => {
+    if (killSwitch) {
+      console.warn("[bot] Start blocked — emergency kill switch is ON");
+      return;
+    }
+    try {
+      const botState = await botStart();
+      setAutoBuy(true);
+      console.log(
+        "[bot] Bot started — status=%s enabled=%s mode=%s",
+        botState.status,
+        botState.enabled,
+        botState.mode,
+      );
+      await refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[bot] Start failed:", msg);
+      setError(msg);
+    }
+  };
+
+  const handleBotPause = async () => {
+    try {
+      const botState = await botPause();
+      console.log("[bot] Bot paused — status=%s", botState.status);
+      setAutoBuy(false);
+      await refresh();
+    } catch (e) {
+      console.error("[bot] Pause failed:", e);
+    }
+  };
+
+  const handleBotStop = async () => {
+    try {
+      const botState = await botStop();
+      console.log(
+        "[bot] Bot stopped — status=%s enabled=%s",
+        botState.status,
+        botState.enabled,
+      );
+      setAutoBuy(false);
+      setKillSwitch(false);
+      await refresh();
+    } catch (e) {
+      console.error("[bot] Stop failed:", e);
+    }
+  };
+
+  const handleEmergencyStop = async () => {
+    console.warn("[bot] EMERGENCY STOP");
+    setKillSwitch(true);
+    setAutoBuy(false);
+    await botStop();
+    await refresh();
+  };
+
+  const handleAutoBuyToggle = async () => {
+    if (killSwitch) return;
+    if (autoBuy) {
+      setAutoBuy(false);
+      await botStop();
+    } else {
+      setAutoBuy(true);
+      await setBotMode(isVirtual ? "virtual" : "real");
+      await botStart();
+    }
+    await refresh();
+  };
+
+  const downloadJson = async () => {
+    const orders = snap?.orders ?? (await fetchHistory("orders", 500));
+    const blob = new Blob([JSON.stringify(orders, null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `trading-history-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const signal = bot?.currentSignal;
+  const pnlUp = pnlIfSideWins(snap, "UP");
+  const pnlDown = pnlIfSideWins(snap, "DOWN");
+
   return (
-    <div className="app">
-      <header className="header">
-        <div>
+    <div className="dashboard">
+      <header className="dash-header">
+        <div className="dash-title-block">
           <h1>BTC Up/Down Bot</h1>
-          <p className="subtitle">Polymarket CLOB V2 · backend-owned trading</p>
+          <p className="dash-subtitle">
+            5-minute BTC up/down · Polymarket CLOB V2
+          </p>
         </div>
-        <div className="header-actions">
-          <span className={`pill status-${bot?.status ?? "stopped"}`}>
-            {bot?.status ?? "—"} · {bot?.mode ?? "—"}
-          </span>
+        <div className="dash-header-right">
+          <div className="badge-row">
+            <span className={`badge badge-${botStatus}`}>
+              {botStatusLabel(botStatus)}
+            </span>
+            <span className={`badge ${isVirtual ? "badge-paper" : "badge-live"}`}>
+              {isVirtual ? "PAPER" : "LIVE"}
+            </span>
+            <span className={`badge ${killSwitch ? "badge-kill-on" : "badge-kill-off"}`}>
+              KILL SWITCH: {killSwitch ? "ON" : "OFF"}
+            </span>
+          </div>
+          <div className="header-btns">
+            <button type="button" className="btn-outline" onClick={downloadJson}>
+              Download JSON
+            </button>
+          </div>
         </div>
       </header>
 
-      {error && <div className="banner error">{error}</div>}
-
-      {connError && (
-        <div className="banner error">
-          <strong>Backend connectivity</strong>
-          <p style={{ margin: "0.5rem 0 0", fontSize: "0.9rem" }}>{connError}</p>
-          <p className="muted" style={{ margin: "0.5rem 0 0" }}>
-            VPN often blocks gamma-api.polymarket.com. Add HTTPS_PROXY to .env, or
-            set MANUAL_UP_TOKEN_ID and MANUAL_DOWN_TOKEN_ID from Polymarket.
-          </p>
+      {(error || connError) && (
+        <div className="alert alert-error">
+          {error || connError}
         </div>
       )}
 
-      <section className="grid stats">
-        <article className="card">
-          <h2>BTC</h2>
-          <p className="big">${fmt(m?.btc.price)}</p>
-          <p className="muted">
-            Start {fmt(m?.btc.startPrice)} · Δ {fmt(m?.btc.distancePct, 3)}%
-            {m?.btc.stale ? " · STALE" : ""}
-          </p>
-        </article>
-        <article className="card">
-          <h2>Signal</h2>
-          <p className={`big signal-${bot?.currentSignal?.side ?? "NONE"}`}>
-            {bot?.currentSignal?.side ?? "—"}
-          </p>
-          <p className="muted">
-            Confidence {fmt((bot?.currentSignal?.confidence ?? 0) * 100, 0)}%
-          </p>
-        </article>
-        <article className="card">
-          <h2>UP / DOWN</h2>
-          <p className="muted">UP mid {fmt(m?.upBook?.mid, 3)}</p>
-          <p className="muted">DOWN mid {fmt(m?.downBook?.mid, 3)}</p>
-        </article>
-        <article className="card">
-          <h2>Position</h2>
-          <p className="muted">UP {snap?.position.upShares ?? 0} shares</p>
-          <p className="muted">DOWN {snap?.position.downShares ?? 0} shares</p>
-        </article>
-      </section>
+      <div className="dash-layout">
+        <aside className="sidebar">
+          <section className="side-card">
+            <h3>Mandatory purchase signal</h3>
+            <select className="select-market" value={market?.conditionId ?? ""} disabled>
+              <option>
+                {market?.question ?? "Searching for BTC up/down market…"}
+              </option>
+            </select>
+          </section>
 
-      <section className="card market-card">
-        <h2>Active market</h2>
-        {m?.market ? (
-          <>
-            <p className="market-title">{m.market.question}</p>
-            <p className="muted">
-              {m.market.windowMinutes}m window · ends{" "}
-              {new Date(m.market.endDate).toLocaleString()}
+          <section className="side-card signal-wait">
+            <h3>Waiting for signal</h3>
+            <p className={`signal-side signal-${signal?.side ?? "NONE"}`}>
+              {signal?.side ?? "NO_TRADE"}
             </p>
-          </>
-        ) : (
-          <p className="muted">Searching for BTC up/down market…</p>
-        )}
-      </section>
+            <dl className="signal-dl">
+              <div>
+                <dt>Confidence</dt>
+                <dd>{fmt((signal?.confidence ?? 0) * 100, 0)}%</dd>
+              </div>
+              <div>
+                <dt>Spot</dt>
+                <dd>${fmt(m?.btc.price)}</dd>
+              </div>
+              <div>
+                <dt>Open</dt>
+                <dd>${fmt(m?.btc.startPrice)}</dd>
+              </div>
+              <div>
+                <dt>Gap</dt>
+                <dd>{fmt(m?.btc.distancePct, 3)}%</dd>
+              </div>
+            </dl>
+          </section>
 
-      <section className="controls card">
-        <h2>Bot controls</h2>
-        <div className="btn-row">
-          <button type="button" onClick={() => botStart().then(refresh)}>
-            Start
-          </button>
-          <button type="button" className="secondary" onClick={() => botPause().then(refresh)}>
-            Pause
-          </button>
-          <button type="button" className="secondary" onClick={() => botStop().then(refresh)}>
-            Stop
-          </button>
           <button
             type="button"
-            className="secondary"
-            onClick={() => setBotMode("dry-run").then(refresh)}
+            className="btn-emergency"
+            onClick={handleEmergencyStop}
           >
-            Dry-run
+            Emergency stop
           </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => setBotMode("live").then(refresh)}
-          >
-            Live
-          </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => cancelAllOrders().then(refresh)}
-          >
-            Cancel all
-          </button>
-        </div>
-        {bot?.error && <p className="error-text">{bot.error}</p>}
-      </section>
 
-      <section className="grid two-col">
-        <article className="card">
-          <h2>Strategy votes</h2>
-          <ul className="votes">
-            {(bot?.currentSignal?.votes ?? []).map((v) => (
-              <li key={v.strategy}>
-                <span>{v.strategy}</span>
-                <span>{v.side}</span>
-                <span>{fmt(v.score, 2)}</span>
-              </li>
-            ))}
-          </ul>
-        </article>
-        <article className="card">
-          <h2>Recent orders</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Side</th>
-                <th>Price</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(snap?.orders ?? []).slice(0, 12).map((o) => (
-                <tr key={o.id}>
-                  <td>{new Date(o.createdAt).toLocaleTimeString()}</td>
-                  <td>{o.side}</td>
-                  <td>{fmt(o.price, 3)}</td>
-                  <td>{o.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
-      </section>
+          <section className="side-card">
+            <h3>Manual buy</h3>
+            <div className="radio-row">
+              <label>
+                <input
+                  type="radio"
+                  name="side"
+                  checked={manualSide === "UP"}
+                  onChange={() => setManualSide("UP")}
+                />
+                Up
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="side"
+                  checked={manualSide === "DOWN"}
+                  onChange={() => setManualSide("DOWN")}
+                />
+                Down
+              </label>
+            </div>
+            <label className="field-label">
+              Shares
+              <input
+                type="number"
+                min={1}
+                value={manualShares}
+                onChange={(e) => setManualShares(Number(e.target.value))}
+              />
+            </label>
+            <button type="button" className="btn-buy" disabled title="Coming soon">
+              Buy now
+            </button>
+            <button
+              type="button"
+              className={`btn-auto ${autoBuy ? "btn-auto-on" : ""}`}
+              disabled={killSwitch}
+              onClick={handleAutoBuyToggle}
+            >
+              Auto buy {autoBuy ? "ON" : "OFF"}
+            </button>
+          </section>
+
+          <section className="side-card side-controls">
+            <h3>Bot</h3>
+            <div className="btn-row-compact">
+              <button
+                type="button"
+                disabled={isRunning || killSwitch}
+                title={
+                  killSwitch
+                    ? "Kill switch ON — use Stop or refresh after clearing"
+                    : isRunning
+                      ? "Bot already running"
+                      : "Start bot"
+                }
+                onClick={handleBotStart}
+              >
+                Start
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={botStatus === "stopped"}
+                onClick={handleBotPause}
+              >
+                Pause
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={botStatus === "stopped"}
+                onClick={handleBotStop}
+              >
+                Stop
+              </button>
+            </div>
+            <div className="btn-row-compact">
+              <button
+                type="button"
+                className={isVirtual ? "mode-on" : "secondary"}
+                onClick={() => setBotMode("virtual").then(refresh)}
+              >
+                Paper
+              </button>
+              <button
+                type="button"
+                className={!isVirtual ? "mode-live-on" : "secondary"}
+                onClick={() => setBotMode("real").then(refresh)}
+              >
+                Live
+              </button>
+            </div>
+            {isVirtual && (
+              <button
+                type="button"
+                className="secondary full"
+                onClick={() => resetVirtualBalance().then(refresh)}
+              >
+                Reset paper balance
+              </button>
+            )}
+            {!isVirtual && (
+              <button
+                type="button"
+                className="danger full"
+                onClick={() => cancelAllOrders().then(refresh)}
+              >
+                Cancel all orders
+              </button>
+            )}
+          </section>
+        </aside>
+
+        <main className="main-panel">
+          <section className="wallet-bar">
+            <div className="wallet-addrs">
+              <div>
+                <span className="lbl">PUBLIC WALLET (METAMASK)</span>
+                <code>{shortAddr(config?.publicWallet)}</code>
+              </div>
+              <div>
+                <span className="lbl">PROXY WALLET (POLYMARKET)</span>
+                <code>{shortAddr(config?.proxyWallet)}</code>
+              </div>
+              <div>
+                <span className="lbl">UPTIME</span>
+                <span>{uptimeSec}s</span>
+              </div>
+            </div>
+            <div className="wallet-total">
+              <span className="lbl">TOTAL VALUE (USDC + POSITIONS)</span>
+              <span className="total-num">{fmtUsd(totalValue)}</span>
+            </div>
+            <div className="wallet-cards">
+              <article>
+                <span className="lbl">
+                  {isVirtual ? "PAPER BALANCE" : "POLYMARKET USDC"}
+                </span>
+                <span className="wallet-amt">
+                  {fmtUsd(isVirtual ? virtualBal?.balanceUsd : totalValue)}
+                </span>
+              </article>
+              <article>
+                <span className="lbl">METAMASK WALLET</span>
+                <span className="wallet-amt">{fmtUsd(isVirtual ? 0 : 0)}</span>
+              </article>
+            </div>
+          </section>
+
+          <section className="window-bar">
+            <div className="window-bar-top">
+              <span>
+                Window ({market?.windowMinutes ?? 5}m){" "}
+                <code className="slug">{market?.slug ?? "—"}</code>
+              </span>
+              <span className="window-remaining">
+                {win.remainingSec}s remaining — ends {win.endLabel}
+              </span>
+            </div>
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${win.pct}%` }}
+              />
+            </div>
+          </section>
+
+          <section className="metric-row four">
+            <article className="metric-card">
+              <span className="lbl">PAIR COST</span>
+              <span className="val">{fmt(pc, 3)}</span>
+            </article>
+            <article className="metric-card">
+              <span className="lbl">MATCHED PROFIT</span>
+              <span className="val val-green">
+                {matchedProfit != null ? fmtUsd(matchedProfit) : "—"}
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="lbl">UNMATCHED EXPOSURE</span>
+              <span className="val">
+                {unmatched === 0 ? "Balanced" : `${unmatched} sh`}
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="lbl">TRACKED QTY UP / DOWN</span>
+              <span className="val">
+                {upShares} / {downShares}
+              </span>
+            </article>
+          </section>
+
+          <section className="pnl-row">
+            <article className="pnl-card">
+              <h3>AFTER PNL IF UP (GROSS)</h3>
+              <p className="pnl-big val-green">{fmtUsd(pnlUp)}</p>
+              <p className="pnl-sub">
+                UP shares {upShares} · exposure {fmtUsd(snap?.position.exposureUsd)}
+              </p>
+            </article>
+            <article className="pnl-card">
+              <h3>AFTER PNL IF DOWN (GROSS)</h3>
+              <p className="pnl-big val-down">{fmtUsd(pnlDown)}</p>
+              <p className="pnl-sub">
+                DOWN shares {downShares} · mid {fmt(m?.downBook?.mid, 3)}
+              </p>
+            </article>
+          </section>
+
+          <section className="metric-row five">
+            <article className="metric-card sm">
+              <span className="lbl">LAST CLOSED — REALIZED P/L</span>
+              <span className="val">{fmtUsd(snap?.pnl.realized)}</span>
+            </article>
+            <article className="metric-card sm">
+              <span className="lbl">WINNER (LAST CLOSED)</span>
+              <span className="val">Pending</span>
+            </article>
+            <article className="metric-card sm">
+              <span className="lbl">CUMULATIVE P/L</span>
+              <span className="val">{fmtUsd(snap?.pnl.daily)}</span>
+            </article>
+            <article className="metric-card sm">
+              <span className="lbl">WINDOWS COMPLETED</span>
+              <span className="val">—</span>
+            </article>
+            <article className="metric-card sm">
+              <span className="lbl">PENDING / FAILURES</span>
+              <span className="val">
+                {(snap?.orders ?? []).filter((o) => o.status.includes("FAIL")).length}
+              </span>
+            </article>
+          </section>
+
+          <section className="history-section">
+            <div className="history-head">
+              <h2>
+                {isVirtual ? "PAPER TRADING" : "LIVE TRADING"} — TRADING HISTORY
+              </h2>
+              <div className="history-stats">
+                <span>
+                  SIMULATED BALANCE {fmtUsd(virtualBal?.balanceUsd)}
+                </span>
+                <span>24h Windows —</span>
+                <span>Orders {histSummary.orders}</span>
+                <span>Spent {fmtUsd(histSummary.spent)}</span>
+                <span>Net {fmtUsd(histSummary.net)}</span>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Side</th>
+                    <th>Price</th>
+                    <th>Size</th>
+                    <th>Status</th>
+                    <th>Mode</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(snap?.orders ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="empty-row">
+                        No orders yet — start the bot in paper mode to simulate
+                      </td>
+                    </tr>
+                  ) : (
+                    (snap?.orders ?? []).slice(0, 20).map((o) => (
+                      <tr key={o.id}>
+                        <td>{new Date(o.createdAt).toLocaleString()}</td>
+                        <td>{o.side}</td>
+                        <td>{fmt(o.price, 3)}</td>
+                        <td>{o.size}</td>
+                        <td>{o.status}</td>
+                        <td>{o.simulated ? "Paper" : "Live"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
   );
 }

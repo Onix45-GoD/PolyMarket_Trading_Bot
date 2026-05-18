@@ -1,4 +1,5 @@
-export type BotMode = "dry-run" | "live";
+export type { BotMode } from "../bot/botMode.js";
+import type { BotMode } from "../bot/botMode.js";
 export type BotStatus = "stopped" | "running" | "paused";
 export type SignalSide = "UP" | "DOWN" | "NO_TRADE";
 
@@ -29,6 +30,8 @@ export interface ActiveMarket {
   question: string;
   slug: string;
   windowMinutes: number;
+  /** Unix seconds at window open (from slug suffix) */
+  windowStartUnix: number;
   endDate: string;
   upTokenId: string;
   downTokenId: string;
@@ -98,12 +101,19 @@ export interface PnlState {
   updatedAt: string;
 }
 
+/** Simulated account balance (dry-run / virtual money only) */
+export interface VirtualAccountState {
+  balanceUsd: number;
+  startingBalanceUsd: number;
+}
+
 export interface SystemSnapshot {
   market: MarketState;
   bot: BotState;
   orders: OrderRecord[];
   position: PositionState;
   pnl: PnlState;
+  virtualAccount: VirtualAccountState;
   connectivity: ConnectivityState;
 }
 

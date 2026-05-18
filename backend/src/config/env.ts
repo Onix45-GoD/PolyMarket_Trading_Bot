@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Repo root .env (common when using npm run dev from project root)
+config({ path: resolve(__dirname, "../../../.env") });
+// backend/.env overrides root
 config({ path: resolve(__dirname, "../../.env") });
-config({ path: resolve(__dirname, "../.env") });
 
 const envSchema = z.object({
   CLOB_HOST: z.string().default("https://clob.polymarket.com"),
@@ -34,8 +36,12 @@ const envSchema = z.object({
   MAX_ORDER_SIZE_USD: z.coerce.number().default(10),
   MAX_DAILY_LOSS_USD: z.coerce.number().default(50),
   MIN_CONFIDENCE: z.coerce.number().default(0.6),
+  /** Starting balance for virtual (dry-run) trading */
+  VIRTUAL_STARTING_BALANCE_USD: z.coerce.number().default(1000),
   GAMMA_API_URL: z.string().default("https://gamma-api.polymarket.com"),
-  BTC_UPDOWN_SEARCH: z.string().default("btc up down"),
+  /** Polymarket slug prefix, e.g. btc-updown-5m-{unix_window_start} */
+  BTC_UPDOWN_SLUG_PREFIX: z.string().default("btc-updown-5m"),
+  BTC_MARKET_WINDOW_MINUTES: z.coerce.number().default(5),
   HTTPS_PROXY: z.string().optional(),
   HTTP_PROXY: z.string().optional(),
   MANUAL_CONDITION_ID: z.string().optional(),

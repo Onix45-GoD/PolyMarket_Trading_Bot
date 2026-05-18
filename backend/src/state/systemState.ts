@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import type {
   BotState,
   ConnectivityState,
@@ -6,6 +7,7 @@ import type {
   PnlState,
   PositionState,
   SystemSnapshot,
+  VirtualAccountState,
 } from "../types/index.js";
 
 const emptyConnectivity: ConnectivityState = {
@@ -56,6 +58,11 @@ class SystemStateStore {
     updatedAt: new Date().toISOString(),
   };
 
+  virtualAccount: VirtualAccountState = {
+    balanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
+    startingBalanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
+  };
+
   connectivity: ConnectivityState = { ...emptyConnectivity };
 
   getSnapshot(): SystemSnapshot {
@@ -65,7 +72,15 @@ class SystemStateStore {
       orders: structuredClone(this.orders),
       position: structuredClone(this.position),
       pnl: structuredClone(this.pnl),
+      virtualAccount: structuredClone(this.virtualAccount),
       connectivity: structuredClone(this.connectivity),
+    };
+  }
+
+  resetVirtualBalance(): void {
+    this.virtualAccount = {
+      balanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
+      startingBalanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
     };
   }
 
@@ -101,6 +116,10 @@ class SystemStateStore {
       ...partial,
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  patchVirtualAccount(partial: Partial<VirtualAccountState>): void {
+    this.virtualAccount = { ...this.virtualAccount, ...partial };
   }
 }
 

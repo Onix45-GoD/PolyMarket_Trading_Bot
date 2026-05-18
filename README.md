@@ -27,7 +27,9 @@ Copy `.env.example` to `backend/.env` and fill in:
 - `DEPOSIT_WALLET_ADDRESS` — funder address (if using signature type 3)
 - `POLY_API_KEY` / `POLY_API_SECRET` / `POLY_API_PASSPHRASE` — optional; derived on startup if omitted
 
-Keep `BOT_MODE=dry-run` until you validate signals in the UI.
+Keep `BOT_MODE=dry-run` (virtual money) until you validate signals in the UI. Switch to real money in the dashboard or set `BOT_MODE=live`.
+
+Market discovery uses Gamma slug lookup only: `btc-updown-5m-{unix_window_start}` (5-minute BTC up/down). Token IDs rotate each window; see `GET /api/market` for `upTokenId` / `downTokenId`.
 
 ### 3. Run
 
@@ -63,7 +65,8 @@ Use `127.0.0.1` instead of `localhost` if your VPN breaks DNS for localhost. Res
 | POST | `/api/bot/start` | Start bot |
 | POST | `/api/bot/pause` | Pause |
 | POST | `/api/bot/stop` | Stop |
-| POST | `/api/bot/mode` | `{ "mode": "dry-run" \| "live" }` |
+| POST | `/api/bot/mode` | `{ "mode": "virtual" \| "real" }` (or `dry-run` / `live`) |
+| POST | `/api/bot/reset-virtual-balance` | Reset paper balance |
 | POST | `/api/orders/cancel-all` | Cancel CLOB orders |
 | GET | `/api/history/:kind` | JSONL tail (`signals`, `orders`, …) |
 
@@ -76,6 +79,6 @@ History files are written to `backend/history/*.jsonl`.
 
 ## Safety
 
-- Default mode is **dry-run** (simulated fills, no live orders).
-- Switch to **live** only after reviewing dry-run history.
+- **Virtual money** (`BOT_MODE=dry-run`): simulated fills, tracked paper balance (`VIRTUAL_STARTING_BALANCE_USD`), no CLOB orders.
+- **Real money** (`BOT_MODE=live`): orders hit Polymarket. Switch only after reviewing virtual trades.
 - Never put `PRIVATE_KEY` in the frontend.

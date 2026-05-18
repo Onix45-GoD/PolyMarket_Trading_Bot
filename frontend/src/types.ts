@@ -1,4 +1,5 @@
 export type SignalSide = "UP" | "DOWN" | "NO_TRADE";
+export type BotStatus = "stopped" | "running" | "paused";
 
 export interface ConnectivityState {
   gamma: string;
@@ -15,6 +16,7 @@ export interface SystemSnapshot {
       question: string;
       slug: string;
       windowMinutes: number;
+      windowStartUnix: number;
       endDate: string;
       upTokenId: string;
       downTokenId: string;
@@ -54,4 +56,7 @@ export interface SystemSnapshot {
   }[];
   position: { upShares: number; downShares: number; exposureUsd: number };
   pnl: { realized: number; unrealized: number; daily: number };
+  virtualAccount: { balanceUsd: number; startingBalanceUsd: number };
 }
+
+export type TradingMoneyMode = "virtual" | "real";

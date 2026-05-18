@@ -33,6 +33,21 @@ export async function executeSignal(
   };
 
   if (simulated) {
+    const cost = price * size;
+    if (systemState.virtualAccount.balanceUsd < cost) {
+      record.status = "SIMULATED_REJECTED_BALANCE";
+      systemState.addOrder(record);
+      await appendJsonl("orders", { ...record, signal, cost });
+      return record;
+    }
+
+    systemState.patchVirtualAccount({
+      balanceUsd: systemState.virtualAccount.balanceUsd - cost,
+    });
+    systemState.patchPosition({
+      exposureUsd: systemState.position.exposureUsd + cost,
+    });
+
     systemState.addOrder(record);
     if (signal.side === "UP") {
       systemState.patchPosition({

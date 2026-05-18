@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { systemState } from "../state/systemState.js";
+import { normalizeBotMode } from "../bot/botMode.js";
 import {
   setBotEnabled,
   setBotMode,
   setBotStatus,
   startBotEngine,
 } from "../bot/botEngine.js";
+import { privateKeyToAccount } from "viem/accounts";
 import { env } from "../config/env.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import { checkClobHealth } from "../polymarket/clobHealth.js";
@@ -45,28 +47,50 @@ apiRouter.post("/bot/start", (_req, res) => {
   setBotEnabled(true);
   setBotStatus("running");
   startBotEngine();
-  res.json(systemState.bot);
+  const bot = systemState.bot;
+  console.log(
+    `[bot] START → status=${bot.status} enabled=${bot.enabled} mode=${bot.mode}`,
+  );
+  res.json(bot);
 });
 
 apiRouter.post("/bot/pause", (_req, res) => {
   setBotStatus("paused");
-  res.json(systemState.bot);
+  const bot = systemState.bot;
+  console.log(`[bot] PAUSE → status=${bot.status}`);
+  res.json(bot);
 });
 
 apiRouter.post("/bot/stop", (_req, res) => {
   setBotEnabled(false);
   setBotStatus("stopped");
-  res.json(systemState.bot);
+  const bot = systemState.bot;
+  console.log(`[bot] STOP → status=${bot.status} enabled=${bot.enabled}`);
+  res.json(bot);
 });
 
 apiRouter.post("/bot/mode", (req, res) => {
-  const mode = req.body?.mode;
-  if (mode !== "dry-run" && mode !== "live") {
-    res.status(400).json({ error: "mode must be dry-run or live" });
+  const raw = req.body?.mode;
+  if (typeof raw !== "string") {
+    res.status(400).json({
+      error: "mode required: virtual | real (or dry-run | live)",
+    });
+    return;
+  }
+  const mode = normalizeBotMode(raw);
+  if (!mode) {
+    res.status(400).json({
+      error: "mode must be virtual, real, dry-run, or live",
+    });
     return;
   }
   setBotMode(mode);
   res.json(systemState.bot);
+});
+
+apiRouter.post("/bot/reset-virtual-balance", (_req, res) => {
+  systemState.resetVirtualBalance();
+  res.json(systemState.virtualAccount);
 });
 
 apiRouter.get("/orders", (_req, res) => {
@@ -115,11 +139,27 @@ apiRouter.post("/orders/cancel-all", async (_req, res) => {
 });
 
 apiRouter.get("/config", (_req, res) => {
+  let publicWallet: string | null = null;
+  if (env.PRIVATE_KEY) {
+    try {
+      publicWallet = privateKeyToAccount(
+        env.PRIVATE_KEY as `0x${string}`,
+      ).address;
+    } catch {
+      publicWallet = null;
+    }
+  }
+  const proxyWallet =
+    env.DEPOSIT_WALLET_ADDRESS?.trim() || publicWallet || null;
+
   res.json({
     botMode: env.BOT_MODE,
+    virtualStartingBalanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
     maxOrderSizeUsd: env.MAX_ORDER_SIZE_USD,
     maxDailyLossUsd: env.MAX_DAILY_LOSS_USD,
     minConfidence: env.MIN_CONFIDENCE,
     clobConfigured: Boolean(env.PRIVATE_KEY),
+    publicWallet,
+    proxyWallet,
   });
 });
