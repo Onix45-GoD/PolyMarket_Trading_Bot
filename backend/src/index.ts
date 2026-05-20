@@ -28,10 +28,12 @@ app.use(express.json());
 app.use("/api", apiRouter);
 
 const server = app.listen(env.API_PORT, env.API_HOST, async () => {
-  console.log(`[api] http://${env.API_HOST}:${env.API_PORT}`);
+  console.log(`[server] API listening http://${env.API_HOST}:${env.API_PORT}`);
+  console.log("[server] starting WebSocket, BTC feed, market data…");
   startWebSocketServer();
   startBtcPriceFeed();
   await startMarketDataService();
+  console.log("[server] market data ready — booting bot engine");
   bootBotEngine();
 });
 

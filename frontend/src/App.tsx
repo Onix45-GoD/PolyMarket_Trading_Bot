@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AppConfig,
-  botPause,
   botStart,
   botStop,
   cancelAllOrders,
@@ -12,7 +11,7 @@ import {
   resetVirtualBalance,
   setBotMode,
 } from "./api/client";
-import type { BotStatus, SystemSnapshot } from "./types";
+import type { BotStatus, SystemSnapshot, TradingMoneyMode } from "./types";
 import { TokenBookPrices } from "./components/TokenBookPrices";
 import { botStatusLabel, fmt, fmtUsd, shortAddr } from "./utils/format";
 import {
@@ -26,8 +25,6 @@ export default function App() {
   const [snap, setSnap] = useState<SystemSnapshot | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [killSwitch, setKillSwitch] = useState(false);
-  const [autoBuy, setAutoBuy] = useState(false);
   const [manualSide, setManualSide] = useState<"UP" | "DOWN">("UP");
   const [manualShares, setManualShares] = useState(10);
   const [uptimeSec, setUptimeSec] = useState(0);
@@ -90,13 +87,8 @@ export default function App() {
   );
 
   const handleBotStart = async () => {
-    if (killSwitch) {
-      console.warn("[bot] Start blocked — emergency kill switch is ON");
-      return;
-    }
     try {
       const botState = await botStart();
-      setAutoBuy(true);
       console.log(
         "[bot] Bot started — status=%s enabled=%s mode=%s",
         botState.status,
@@ -111,17 +103,6 @@ export default function App() {
     }
   };
 
-  const handleBotPause = async () => {
-    try {
-      const botState = await botPause();
-      console.log("[bot] Bot paused — status=%s", botState.status);
-      setAutoBuy(false);
-      await refresh();
-    } catch (e) {
-      console.error("[bot] Pause failed:", e);
-    }
-  };
-
   const handleBotStop = async () => {
     try {
       const botState = await botStop();
@@ -130,33 +111,29 @@ export default function App() {
         botState.status,
         botState.enabled,
       );
-      setAutoBuy(false);
-      setKillSwitch(false);
       await refresh();
     } catch (e) {
       console.error("[bot] Stop failed:", e);
     }
   };
 
-  const handleEmergencyStop = async () => {
-    console.warn("[bot] EMERGENCY STOP");
-    setKillSwitch(true);
-    setAutoBuy(false);
-    await botStop();
-    await refresh();
-  };
+  const handleBotModeChange = async (mode: TradingMoneyMode) => {
+    const switchingToPaper = mode === "virtual";
+    if (switchingToPaper === isVirtual) return;
 
-  const handleAutoBuyToggle = async () => {
-    if (killSwitch) return;
-    if (autoBuy) {
-      setAutoBuy(false);
-      await botStop();
-    } else {
-      setAutoBuy(true);
-      await setBotMode(isVirtual ? "virtual" : "real");
-      await botStart();
+    try {
+      if (isRunning) {
+        await botStop();
+        console.log("[bot] Stopped before switching to %s mode", mode);
+      }
+      await setBotMode(mode);
+      console.log("[bot] Mode set to %s", mode);
+      await refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[bot] Mode change failed:", msg);
+      setError(msg);
     }
-    await refresh();
   };
 
   const downloadJson = async () => {
@@ -191,9 +168,6 @@ export default function App() {
             </span>
             <span className={`badge ${isVirtual ? "badge-paper" : "badge-live"}`}>
               {isVirtual ? "PAPER" : "LIVE"}
-            </span>
-            <span className={`badge ${killSwitch ? "badge-kill-on" : "badge-kill-off"}`}>
-              KILL SWITCH: {killSwitch ? "ON" : "OFF"}
             </span>
           </div>
           <div className="header-btns">
@@ -254,14 +228,6 @@ export default function App() {
             </dl>
           </section>
 
-          <button
-            type="button"
-            className="btn-emergency"
-            onClick={handleEmergencyStop}
-          >
-            Emergency stop
-          </button>
-
           <section className="side-card">
             <h3>Manual buy</h3>
             <div className="radio-row">
@@ -296,14 +262,6 @@ export default function App() {
             <button type="button" className="btn-buy" disabled title="Coming soon">
               Buy now
             </button>
-            <button
-              type="button"
-              className={`btn-auto ${autoBuy ? "btn-auto-on" : ""}`}
-              disabled={killSwitch}
-              onClick={handleAutoBuyToggle}
-            >
-              Auto buy {autoBuy ? "ON" : "OFF"}
-            </button>
           </section>
 
           <section className="side-card side-controls">
@@ -311,25 +269,11 @@ export default function App() {
             <div className="btn-row-compact">
               <button
                 type="button"
-                disabled={isRunning || killSwitch}
-                title={
-                  killSwitch
-                    ? "Kill switch ON — use Stop or refresh after clearing"
-                    : isRunning
-                      ? "Bot already running"
-                      : "Start bot"
-                }
+                disabled={isRunning}
+                title={isRunning ? "Bot already running" : "Start bot"}
                 onClick={handleBotStart}
               >
                 Start
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={botStatus === "stopped"}
-                onClick={handleBotPause}
-              >
-                Pause
               </button>
               <button
                 type="button"
@@ -344,14 +288,18 @@ export default function App() {
               <button
                 type="button"
                 className={isVirtual ? "mode-on" : "secondary"}
-                onClick={() => setBotMode("virtual").then(refresh)}
+                disabled={isVirtual}
+                title={isVirtual ? "Already in paper mode" : "Switch to paper (stops bot)"}
+                onClick={() => handleBotModeChange("virtual")}
               >
                 Paper
               </button>
               <button
                 type="button"
                 className={!isVirtual ? "mode-live-on" : "secondary"}
-                onClick={() => setBotMode("real").then(refresh)}
+                disabled={!isVirtual}
+                title={!isVirtual ? "Already in live mode" : "Switch to live (stops bot)"}
+                onClick={() => handleBotModeChange("real")}
               >
                 Live
               </button>

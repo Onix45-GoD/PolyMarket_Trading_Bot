@@ -84,8 +84,21 @@ apiRouter.post("/bot/mode", (req, res) => {
     });
     return;
   }
+
+  const wasActive =
+    systemState.bot.enabled || systemState.bot.status === "running";
+  if (wasActive) {
+    setBotEnabled(false);
+    setBotStatus("stopped");
+    console.log(
+      `[bot] STOP (mode change) → status=${systemState.bot.status} enabled=${systemState.bot.enabled}`,
+    );
+  }
+
   setBotMode(mode);
-  res.json(systemState.bot);
+  const bot = systemState.bot;
+  console.log(`[bot] MODE → ${bot.mode}`);
+  res.json(bot);
 });
 
 apiRouter.post("/bot/reset-virtual-balance", (_req, res) => {

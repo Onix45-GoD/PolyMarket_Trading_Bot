@@ -35,8 +35,8 @@ export function setBotMode(mode: BotMode): void {
 }
 
 async function tick(): Promise<void> {
-  const active =
-    systemState.bot.status === "running" && systemState.bot.enabled;
+  const { status, enabled } = systemState.bot;
+  const active = status === "running" && enabled;
   if (!active) {
     loggedTicksActive = false;
     return;
@@ -44,7 +44,9 @@ async function tick(): Promise<void> {
 
   if (!loggedTicksActive) {
     loggedTicksActive = true;
-    console.log("[bot] ticking (running, evaluating signals every 3s)");
+    console.log(
+      `[bot] trading active (status=${status}, mode=${botMode}, tick every ${TICK_MS}ms)`,
+    );
   }
 
   const market = systemState.market;
@@ -62,22 +64,29 @@ async function tick(): Promise<void> {
   });
 
   const risk = evaluateRisk(signal, market);
+  const marketSlug = market.market?.slug ?? "no-market";
   if (!risk.approved) {
-    if (Math.random() < 0.05) {
-      console.log(`[bot] tick: no trade (${risk.reason}) signal=${signal.side}`);
-    }
+    console.log(
+      `[bot] tick ${tickAt} market=${marketSlug} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → skip (${risk.reason})`,
+    );
     return;
   }
 
   if (Date.now() - lastTradeAt < COOLDOWN_MS) return;
+
+  console.log(
+    `[bot] tick ${tickAt} market=${marketSlug} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → placing order (mode=${botMode})`,
+  );
 
   const simulated = isVirtualMode(botMode);
   const order = await executeSignal(signal, simulated);
   if (order) {
     lastTradeAt = Date.now();
     console.log(
-      `[bot] order ${order.status} ${signal.side} @ ${order.price} x${order.size}`,
+      `[bot] order ${order.status} ${signal.side} @ ${order.price} x${order.size} simulated=${simulated}`,
     );
+  } else {
+    console.log(`[bot] tick ${tickAt} → execute returned no order`);
   }
 }
 
@@ -95,24 +104,39 @@ function ensureTickTimer(): void {
 
 /** Called once at server boot — applies BOT_ENABLED from .env */
 export function bootBotEngine(): void {
+  const autoStart = env.BOT_ENABLED;
   systemState.patchBot({
     mode: botMode,
-    enabled: env.BOT_ENABLED,
-    status: env.BOT_ENABLED ? "running" : "stopped",
+    enabled: autoStart,
+    status: autoStart ? "running" : "stopped",
   });
   ensureTickTimer();
-  console.log(
-    `[bot] boot: status=${systemState.bot.status} enabled=${systemState.bot.enabled} mode=${botMode}`,
-  );
+  if (autoStart) {
+    console.log(
+      `[bot] AUTO-START from BOT_ENABLED=true → status=running mode=${botMode}`,
+    );
+  } else {
+    console.log(
+      `[bot] boot: idle (BOT_ENABLED=false) — click Start in UI or POST /api/bot/start`,
+    );
+    console.log(
+      `[bot] boot: status=stopped mode=${botMode} (timer armed, no trades until started)`,
+    );
+  }
 }
 
 /** Ensures timer is running; does not reset enabled/status (use API start/stop for that) */
 export function startBotEngine(): void {
   ensureTickTimer();
+  console.log(
+    `[bot] engine started via API → status=${systemState.bot.status} enabled=${systemState.bot.enabled}`,
+  );
 }
 
 export function stopBotEngine(): void {
   if (timer) clearInterval(timer);
   timer = null;
+  loggedTicksActive = false;
   systemState.patchBot({ status: "stopped" });
+  console.log("[bot] engine stopped (shutdown or stop)");
 }
