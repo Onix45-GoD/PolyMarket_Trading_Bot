@@ -25,8 +25,6 @@ export default function App() {
   const [snap, setSnap] = useState<SystemSnapshot | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [manualSide, setManualSide] = useState<"UP" | "DOWN">("UP");
-  const [manualShares, setManualShares] = useState(10);
   const [uptimeSec, setUptimeSec] = useState(0);
   const [sessionStart] = useState(() => Date.now());
 
@@ -226,42 +224,6 @@ export default function App() {
                 <dd>{fmt(m?.btc.distancePct, 3)}%</dd>
               </div>
             </dl>
-          </section>
-
-          <section className="side-card">
-            <h3>Manual buy</h3>
-            <div className="radio-row">
-              <label>
-                <input
-                  type="radio"
-                  name="side"
-                  checked={manualSide === "UP"}
-                  onChange={() => setManualSide("UP")}
-                />
-                Up
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="side"
-                  checked={manualSide === "DOWN"}
-                  onChange={() => setManualSide("DOWN")}
-                />
-                Down
-              </label>
-            </div>
-            <label className="field-label">
-              Shares
-              <input
-                type="number"
-                min={1}
-                value={manualShares}
-                onChange={(e) => setManualShares(Number(e.target.value))}
-              />
-            </label>
-            <button type="button" className="btn-buy" disabled title="Coming soon">
-              Buy now
-            </button>
           </section>
 
           <section className="side-card side-controls">
