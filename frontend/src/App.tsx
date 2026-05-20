@@ -184,6 +184,42 @@ export default function App() {
 
       <div className="dash-layout">
         <aside className="sidebar">
+          <section className="side-card wallet-bar">
+            <h3>Wallet</h3>
+            <div className="wallet-addrs">
+              <div>
+                <span className="lbl">PUBLIC WALLET (METAMASK)</span>
+                <code>{shortAddr(config?.publicWallet)}</code>
+              </div>
+              <div>
+                <span className="lbl">PROXY WALLET (POLYMARKET)</span>
+                <code>{shortAddr(config?.proxyWallet)}</code>
+              </div>
+              <div>
+                <span className="lbl">UPTIME</span>
+                <span>{uptimeSec}s</span>
+              </div>
+            </div>
+            <div className="wallet-total">
+              <span className="lbl">TOTAL VALUE (USDC + POSITIONS)</span>
+              <span className="total-num">{fmtUsd(totalValue)}</span>
+            </div>
+            <div className="wallet-cards">
+              <article>
+                <span className="lbl">
+                  {isVirtual ? "PAPER BALANCE" : "POLYMARKET USDC"}
+                </span>
+                <span className="wallet-amt">
+                  {fmtUsd(isVirtual ? virtualBal?.balanceUsd : totalValue)}
+                </span>
+              </article>
+              <article>
+                <span className="lbl">METAMASK WALLET</span>
+                <span className="wallet-amt">{fmtUsd(isVirtual ? 0 : 0)}</span>
+              </article>
+            </div>
+          </section>
+
           <section className="side-card">
             <h3>Mandatory purchase signal</h3>
             <select className="select-market" value={market?.conditionId ?? ""} disabled>
@@ -288,41 +324,6 @@ export default function App() {
         </aside>
 
         <main className="main-panel">
-          <section className="wallet-bar">
-            <div className="wallet-addrs">
-              <div>
-                <span className="lbl">PUBLIC WALLET (METAMASK)</span>
-                <code>{shortAddr(config?.publicWallet)}</code>
-              </div>
-              <div>
-                <span className="lbl">PROXY WALLET (POLYMARKET)</span>
-                <code>{shortAddr(config?.proxyWallet)}</code>
-              </div>
-              <div>
-                <span className="lbl">UPTIME</span>
-                <span>{uptimeSec}s</span>
-              </div>
-            </div>
-            <div className="wallet-total">
-              <span className="lbl">TOTAL VALUE (USDC + POSITIONS)</span>
-              <span className="total-num">{fmtUsd(totalValue)}</span>
-            </div>
-            <div className="wallet-cards">
-              <article>
-                <span className="lbl">
-                  {isVirtual ? "PAPER BALANCE" : "POLYMARKET USDC"}
-                </span>
-                <span className="wallet-amt">
-                  {fmtUsd(isVirtual ? virtualBal?.balanceUsd : totalValue)}
-                </span>
-              </article>
-              <article>
-                <span className="lbl">METAMASK WALLET</span>
-                <span className="wallet-amt">{fmtUsd(isVirtual ? 0 : 0)}</span>
-              </article>
-            </div>
-          </section>
-
           <section className="window-bar">
             <div className="window-bar-top">
               <span>

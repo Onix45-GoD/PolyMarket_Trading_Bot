@@ -288,19 +288,25 @@ code {
   min-width: 0;
 }
 
-.wallet-bar {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1rem 1.25rem;
+.sidebar .wallet-bar {
+  padding: 0.85rem 1rem;
+}
+
+.sidebar .wallet-bar h3 {
+  margin-bottom: 0.65rem;
 }
 
 .wallet-addrs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem 2rem;
-  margin-bottom: 0.75rem;
-  font-size: 0.8rem;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.75rem;
+}
+
+.wallet-addrs code {
+  font-size: 0.7rem;
+  word-break: break-all;
 }
 
 .wallet-addrs .lbl {
@@ -324,22 +330,22 @@ code {
 
 .total-num {
   font-family: "JetBrains Mono", monospace;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--green);
 }
 
 .wallet-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
 }
 
 .wallet-cards article {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.65rem;
 }
 
 .wallet-cards .lbl {
@@ -352,7 +358,7 @@ code {
 
 .wallet-amt {
   font-family: "JetBrains Mono", monospace;
-  font-size: 1.35rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
