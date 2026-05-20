@@ -13,6 +13,7 @@ import {
   setBotMode,
 } from "./api/client";
 import type { BotStatus, SystemSnapshot } from "./types";
+import { TokenBookPrices } from "./components/TokenBookPrices";
 import { botStatusLabel, fmt, fmtUsd, shortAddr } from "./utils/format";
 import {
   history24hSummary,
@@ -227,6 +228,14 @@ export default function App() {
             </p>
             <dl className="signal-dl">
               <div>
+                <dt>UP mid</dt>
+                <dd>{fmt(m?.upBook?.mid, 3)}</dd>
+              </div>
+              <div>
+                <dt>DOWN mid</dt>
+                <dd>{fmt(m?.downBook?.mid, 3)}</dd>
+              </div>
+              <div>
                 <dt>Confidence</dt>
                 <dd>{fmt((signal?.confidence ?? 0) * 100, 0)}%</dd>
               </div>
@@ -422,10 +431,34 @@ export default function App() {
             </div>
           </section>
 
+          <section className="token-prices-row">
+            <TokenBookPrices
+              title="UP token"
+              book={m?.upBook}
+              variant="up"
+              errorHint={conn?.clobError}
+            />
+            <TokenBookPrices
+              title="DOWN token"
+              book={m?.downBook}
+              variant="down"
+              errorHint={conn?.clobError}
+            />
+          </section>
+
           <section className="metric-row four">
             <article className="metric-card">
               <span className="lbl">PAIR COST</span>
               <span className="val">{fmt(pc, 3)}</span>
+              <span className="val-sub">
+                Ask sum{" "}
+                {fmt(
+                  m?.upBook?.bestAsk != null && m?.downBook?.bestAsk != null
+                    ? m.upBook.bestAsk + m.downBook.bestAsk
+                    : null,
+                  3,
+                )}
+              </span>
             </article>
             <article className="metric-card">
               <span className="lbl">MATCHED PROFIT</span>

@@ -4,6 +4,7 @@ import { findActiveBtcUpDownMarket } from "../market_discovery/btcMarketFinder.j
 import { getManualMarket } from "../market_discovery/manualMarket.js";
 import { formatFetchError } from "../net/initNetwork.js";
 import { buildBookSnapshot } from "./orderbookLoader.js";
+import { fetchPublicOrderBooks } from "./publicOrderBook.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 
@@ -20,23 +21,31 @@ async function refreshBooks(): Promise<void> {
   const market = systemState.market.market;
   if (!market) return;
 
-  const clob = await getClobClient();
-  if (!clob) {
-    systemState.patchConnectivity({
-      clob: "no_client",
-      clobError: "PRIVATE_KEY not set — order books need CLOB client",
-    });
-    return;
-  }
-
   try {
-    const [upRaw, downRaw] = await Promise.all([
-      clob.getOrderBook(market.upTokenId),
-      clob.getOrderBook(market.downTokenId),
-    ]);
+    let upBook;
+    let downBook;
 
-    const upBook = buildBookSnapshot(upRaw.bids ?? [], upRaw.asks ?? []);
-    const downBook = buildBookSnapshot(downRaw.bids ?? [], downRaw.asks ?? []);
+    const clob = await getClobClient();
+    if (clob) {
+      try {
+        const [upRaw, downRaw] = await Promise.all([
+          clob.getOrderBook(market.upTokenId),
+          clob.getOrderBook(market.downTokenId),
+        ]);
+        upBook = buildBookSnapshot(upRaw.bids ?? [], upRaw.asks ?? []);
+        downBook = buildBookSnapshot(downRaw.bids ?? [], downRaw.asks ?? []);
+      } catch {
+        ({ upBook, downBook } = await fetchPublicOrderBooks(
+          market.upTokenId,
+          market.downTokenId,
+        ));
+      }
+    } else {
+      ({ upBook, downBook } = await fetchPublicOrderBooks(
+        market.upTokenId,
+        market.downTokenId,
+      ));
+    }
 
     systemState.patchMarket({ upBook, downBook });
     systemState.patchConnectivity({ clob: "ok", clobError: null });

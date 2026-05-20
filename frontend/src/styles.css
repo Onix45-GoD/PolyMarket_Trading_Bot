@@ -486,6 +486,136 @@ code {
   transition: width 0.5s ease;
 }
 
+/* UP / DOWN token prices */
+.token-prices-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 600px) {
+  .token-prices-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.token-price-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+}
+
+.token-price-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.token-up {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.token-down {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.token-up h3 {
+  color: var(--green);
+}
+
+.token-down h3 {
+  color: var(--red);
+}
+
+.bid-ask-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.bid-ask-cell {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+}
+
+.bid-ask-cell.bid {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.bid-ask-cell.ask {
+  border-color: rgba(251, 146, 60, 0.45);
+}
+
+.bid-ask-cell.empty .ba-price {
+  color: var(--muted);
+}
+
+.ba-label {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.ba-price {
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.bid-ask-cell.bid .ba-price {
+  color: var(--green);
+}
+
+.bid-ask-cell.ask .ba-price {
+  color: var(--orange);
+}
+
+.ba-hint {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.ba-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.ba-footer strong {
+  color: var(--text);
+}
+
+.val-sub {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  margin-top: 0.25rem;
+}
+
+.token-missing {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--warn);
+}
+
 /* Metrics */
 .metric-row {
   display: grid;
