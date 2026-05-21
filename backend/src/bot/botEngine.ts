@@ -6,9 +6,31 @@ import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 import type { BotMode } from "./botMode.js";
 import { isVirtualMode } from "./botMode.js";
-import type { BotStatus } from "../types/index.js";
+import type { BotStatus, MarketState } from "../types/index.js";
 
 const TICK_MS = 3000;
+
+function fmtTokenPrice(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return n.toFixed(4);
+}
+
+function formatTickPrices(market: MarketState): string {
+  const up =
+    market.upBook?.mid ??
+    market.upBook?.bestAsk ??
+    market.upBook?.bestBid;
+  const down =
+    market.downBook?.mid ??
+    market.downBook?.bestAsk ??
+    market.downBook?.bestBid;
+  const parts = [`up=${fmtTokenPrice(up)}`, `down=${fmtTokenPrice(down)}`];
+  const btc = market.btc.price;
+  if (btc > 0 && Number.isFinite(btc)) {
+    parts.push(`btc=$${btc.toFixed(2)}`);
+  }
+  return parts.join(" ");
+}
 let timer: ReturnType<typeof setInterval> | null = null;
 let lastTradeAt = 0;
 let loggedTicksActive = false;
@@ -65,9 +87,10 @@ async function tick(): Promise<void> {
 
   const risk = evaluateRisk(signal, market);
   const marketSlug = market.market?.slug ?? "no-market";
+  const prices = formatTickPrices(market);
   if (!risk.approved) {
     console.log(
-      `[bot] tick ${tickAt} market=${marketSlug} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → skip (${risk.reason})`,
+      `[bot] tick ${tickAt} market=${marketSlug} ${prices} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → skip (${risk.reason})`,
     );
     return;
   }
@@ -75,7 +98,7 @@ async function tick(): Promise<void> {
   if (Date.now() - lastTradeAt < COOLDOWN_MS) return;
 
   console.log(
-    `[bot] tick ${tickAt} market=${marketSlug} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → placing order (mode=${botMode})`,
+    `[bot] tick ${tickAt} market=${marketSlug} ${prices} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → placing order (mode=${botMode})`,
   );
 
   const simulated = isVirtualMode(botMode);
@@ -86,7 +109,9 @@ async function tick(): Promise<void> {
       `[bot] order ${order.status} ${signal.side} @ ${order.price} x${order.size} simulated=${simulated}`,
     );
   } else {
-    console.log(`[bot] tick ${tickAt} → execute returned no order`);
+    console.log(
+      `[bot] tick ${tickAt} market=${marketSlug} ${prices} → execute returned no order`,
+    );
   }
 }
 
