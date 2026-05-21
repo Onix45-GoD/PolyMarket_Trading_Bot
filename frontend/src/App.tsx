@@ -24,6 +24,7 @@ import {
   pnlIfSideWins,
   windowProgress,
 } from "./utils/metrics";
+import { groupOrdersForDisplay } from "./utils/groupPairOrders";
 
 export default function App() {
   const [snap, setSnap] = useState<SystemSnapshot | null>(null);
@@ -85,6 +86,11 @@ export default function App() {
 
   const histSummary = useMemo(
     () => history24hSummary(snap?.orders ?? []),
+    [snap?.orders],
+  );
+
+  const displayOrders = useMemo(
+    () => groupOrdersForDisplay(snap?.orders ?? []),
     [snap?.orders],
   );
 
@@ -480,19 +486,27 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(snap?.orders ?? []).length === 0 ? (
+                  {displayOrders.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="empty-row">
                         No orders yet — start the bot in paper mode to simulate
                       </td>
                     </tr>
                   ) : (
-                    (snap?.orders ?? []).slice(0, 20).map((o) => (
-                      <tr key={o.id}>
+                    displayOrders.slice(0, 20).map((o) => (
+                      <tr key={o.key}>
                         <td>{new Date(o.createdAt).toLocaleString()}</td>
-                        <td>{o.leg ?? "—"}</td>
+                        <td>{o.leg}</td>
                         <td>{o.side}</td>
-                        <td>{fmt(o.price, 3)}</td>
+                        <td
+                          title={
+                            o.leg === "PAIR" && o.upPrice != null && o.downPrice != null
+                              ? `UP ${fmt(o.upPrice, 3)} + DOWN ${fmt(o.downPrice, 3)}`
+                              : undefined
+                          }
+                        >
+                          {fmt(o.price, 3)}
+                        </td>
                         <td>{o.size}</td>
                         <td>{o.status}</td>
                         <td>{o.simulated ? "Paper" : "Live"}</td>

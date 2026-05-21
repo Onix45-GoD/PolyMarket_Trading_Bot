@@ -1,4 +1,9 @@
 import type { SystemSnapshot } from "../types";
+import {
+  displayOrderCost,
+  groupOrdersForDisplay,
+  isDisplayOrderFilled,
+} from "./groupPairOrders";
 
 export function pairCost(snap: SystemSnapshot | null): number | null {
   const up = snap?.market.upBook?.mid;
@@ -35,16 +40,10 @@ export function pnlIfSideWins(
   return payout - snap.position.exposureUsd;
 }
 
-export function history24hSummary(
-  orders: { simulated: boolean; price: number; size: number; status: string }[],
-) {
-  const filled = orders.filter(
-    (o) =>
-      o.status.includes("FILLED") ||
-      o.status.includes("SUBMITTED") ||
-      o.status === "PENDING",
-  );
-  const spent = filled.reduce((s, o) => s + o.price * o.size, 0);
+export function history24hSummary(orders: SystemSnapshot["orders"]) {
+  const rows = groupOrdersForDisplay(orders);
+  const filled = rows.filter(isDisplayOrderFilled);
+  const spent = filled.reduce((s, o) => s + displayOrderCost(o), 0);
   return {
     orders: filled.length,
     spent,
