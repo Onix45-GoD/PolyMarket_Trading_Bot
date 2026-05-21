@@ -44,6 +44,17 @@ const envSchema = z.object({
   BOT_TICK_MS: z.coerce.number().default(1000),
   /** CLOB order book refresh interval (ms) */
   MARKET_POLL_MS: z.coerce.number().default(2000),
+  /** Live: cancel unfilled limit orders after this many ms */
+  LIVE_ORDER_CANCEL_MS: z.coerce.number().default(1500),
+  /** Live: poll open orders for fill/cancel rules */
+  LIVE_ORDER_WATCH_MS: z.coerce.number().default(500),
+  /** Live: cancel all open orders when market ends within this many seconds */
+  LIVE_EXPIRY_CANCEL_SEC: z.coerce.number().default(30),
+  /** Live: skip new pair buys while previous pair orders are still open */
+  LIVE_BLOCK_WHILE_OPEN: z
+    .string()
+    .transform((v) => v !== "false" && v !== "0")
+    .default("true"),
   /** Starting balance for virtual (dry-run) trading */
   VIRTUAL_STARTING_BALANCE_USD: z.coerce.number().default(1000),
   GAMMA_API_URL: z.string().default("https://gamma-api.polymarket.com"),

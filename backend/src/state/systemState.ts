@@ -127,6 +127,12 @@ class SystemStateStore {
     this.orders = [order, ...this.orders].slice(0, 200);
   }
 
+  updateOrder(orderId: string, partial: Partial<OrderRecord>): void {
+    this.orders = this.orders.map((o) =>
+      o.id === orderId ? { ...o, ...partial } : o,
+    );
+  }
+
   patchPosition(partial: Partial<PositionState>): void {
     this.position = { ...this.position, ...partial };
   }

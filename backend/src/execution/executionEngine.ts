@@ -1,8 +1,10 @@
 import { Side } from "@polymarket/clob-client-v2";
+import { getBtcDirection } from "../btc_price/btcDirection.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import type { OrderRecord } from "../types/index.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
+import { registerLivePairOrders } from "./liveOrderTracker.js";
 
 export interface PairExecutionResult {
   pairId: string;
@@ -132,7 +134,22 @@ export async function executePairBuy(
     downOrder.status = "LIVE_SUBMITTED";
     systemState.addOrder(upOrder);
     systemState.addOrder(downOrder);
-    await appendJsonl("orders", { pairId, action: "BUY_PAIR", size });
+
+    const btcDir = getBtcDirection(systemState.market.btc) ?? "FLAT";
+    registerLivePairOrders(pairId, [upOrder, downOrder], {
+      windowId: market.conditionId,
+      conditionId: market.conditionId,
+      btcDirection: btcDir,
+    });
+
+    await appendJsonl("orders", {
+      pairId,
+      action: "BUY_PAIR",
+      size,
+      bidUp,
+      bidDown,
+      btcDirection: btcDir,
+    });
     return { pairId, orders: [upOrder, downOrder], ok: true };
   } catch (err) {
     upOrder.status = "FAILED";

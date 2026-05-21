@@ -9,6 +9,10 @@ import { startWebSocketServer, stopWebSocketServer } from "./api/websocketServer
 import { startMarketDataService, stopMarketDataService } from "./market_data/marketDataService.js";
 import { startBtcPriceFeed, stopBtcPriceFeed } from "./btc_price/btcPriceFeed.js";
 import { bootBotEngine, stopBotEngine } from "./bot/botEngine.js";
+import {
+  startLiveOrderWatch,
+  stopLiveOrderWatch,
+} from "./execution/liveOrderCancel.js";
 
 const app = express();
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((o) => o.trim());
@@ -35,9 +39,11 @@ const server = app.listen(env.API_PORT, env.API_HOST, async () => {
   await startMarketDataService();
   console.log("[server] market data ready — booting bot engine");
   bootBotEngine();
+  startLiveOrderWatch();
 });
 
 async function shutdown(): Promise<void> {
+  stopLiveOrderWatch();
   stopBotEngine();
   stopMarketDataService();
   stopBtcPriceFeed();

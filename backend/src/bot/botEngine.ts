@@ -3,6 +3,12 @@ import { evaluatePairArb } from "./pairArb.js";
 import { executePairArbDecision, resetPairArbTradeState } from "./pairArbTrade.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
+import {
+  cancelAllOpenLiveOrders,
+  resetLiveOrderWatchState,
+} from "../execution/liveOrderCancel.js";
+import { clearLiveOrders } from "../execution/liveOrderTracker.js";
+import { isVirtualMode } from "./botMode.js";
 import type { BotMode } from "./botMode.js";
 import type { BotStatus, PairArbState } from "../types/index.js";
 
@@ -130,11 +136,26 @@ export function startBotEngine(): void {
   );
 }
 
-export function stopBotEngine(): void {
+export async function stopBotEngineAsync(): Promise<void> {
   if (timer) clearInterval(timer);
   timer = null;
   loggedTicksActive = false;
   resetPairArbTradeState();
+  if (!isVirtualMode(botMode)) {
+    await cancelAllOpenLiveOrders("bot_stop");
+  }
+  clearLiveOrders();
+  resetLiveOrderWatchState();
   systemState.patchBot({ status: "stopped" });
   console.log("[bot] engine stopped (shutdown or stop)");
+}
+
+export function stopBotEngine(): void {
+  stopBotEngineAsync().catch((err) => {
+    console.warn(
+      "[bot] stop cleanup:",
+      err instanceof Error ? err.message : err,
+    );
+    systemState.patchBot({ status: "stopped" });
+  });
 }

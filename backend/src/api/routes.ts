@@ -142,7 +142,13 @@ apiRouter.post("/orders/cancel-all", async (_req, res) => {
     return;
   }
   try {
+    const { cancelAllOpenLiveOrders } = await import(
+      "../execution/liveOrderCancel.js"
+    );
+    const { clearLiveOrders } = await import("../execution/liveOrderTracker.js");
+    await cancelAllOpenLiveOrders("manual");
     await clob.cancelAll();
+    clearLiveOrders();
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({

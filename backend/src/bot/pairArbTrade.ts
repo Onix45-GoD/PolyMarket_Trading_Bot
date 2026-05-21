@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { executePairBuy } from "../execution/executionEngine.js";
+import { hasOpenLiveOrders } from "../execution/liveOrderTracker.js";
 import { evaluatePairRisk } from "../risk/riskManager.js";
 import { systemState } from "../state/systemState.js";
 import { isVirtualMode } from "./botMode.js";
@@ -63,6 +64,14 @@ export async function executePairArbDecision(
   const at = new Date().toISOString();
   const mode = systemState.bot.mode as BotMode;
   const simulated = isVirtualMode(mode);
+
+  if (
+    !simulated &&
+    env.LIVE_BLOCK_WHILE_OPEN &&
+    hasOpenLiveOrders()
+  ) {
+    return;
+  }
 
   console.log(
     `[bot] ${source} ${at} ${slug} → BUY_PAIR x${decision.size} (mode=${mode}, maxPerTrade=${env.MAX_PAIR_ORDER_SIZE})`,

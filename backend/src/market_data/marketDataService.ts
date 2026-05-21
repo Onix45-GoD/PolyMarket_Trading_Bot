@@ -12,6 +12,12 @@ import {
   maybeSettleExpiredPaperWindow,
   settlePaperWindowIfNeeded,
 } from "../settlement/windowSettlement.js";
+import {
+  cancelAllOpenLiveOrders,
+  enforceLiveOrderCancelRules,
+} from "../execution/liveOrderCancel.js";
+import { isVirtualMode } from "../bot/botMode.js";
+import type { BotMode } from "../bot/botMode.js";
 
 const POLL_MS = env.MARKET_POLL_MS;
 const MIN_DISCOVERY_MS = 5000;
@@ -27,6 +33,7 @@ async function refreshBooks(): Promise<void> {
   if (!market) return;
 
   await maybeSettleExpiredPaperWindow();
+  await enforceLiveOrderCancelRules();
 
   try {
     let upBook;
@@ -82,6 +89,9 @@ async function refreshMarket(): Promise<void> {
     const prev = systemState.market.market;
     const btc = systemState.market.btc;
     if (prev && prev.conditionId !== manual.conditionId) {
+      if (!isVirtualMode(systemState.bot.mode as BotMode)) {
+        await cancelAllOpenLiveOrders("window_switch");
+      }
       await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
     }
     systemState.patchMarket({ market: manual });
@@ -108,6 +118,9 @@ async function refreshMarket(): Promise<void> {
       const prev = systemState.market.market;
       const btc = systemState.market.btc;
       if (prev && prev.conditionId !== found.conditionId) {
+        if (!isVirtualMode(systemState.bot.mode as BotMode)) {
+          await cancelAllOpenLiveOrders("window_switch");
+        }
         await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
       }
       systemState.patchMarket({ market: found });
