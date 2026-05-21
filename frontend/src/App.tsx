@@ -21,7 +21,7 @@ import {
 import {
   history24hSummary,
   pairCost,
-  pnlIfSideWins,
+  pairPositionMetrics,
   windowProgress,
 } from "./utils/metrics";
 import { groupOrdersForDisplay } from "./utils/groupPairOrders";
@@ -79,10 +79,13 @@ export default function App() {
 
   const upShares = snap?.position.upShares ?? 0;
   const downShares = snap?.position.downShares ?? 0;
-  const unmatched = Math.abs(upShares - downShares);
-  const matched = Math.min(upShares, downShares);
+  const pairPos = useMemo(() => pairPositionMetrics(snap), [snap]);
+  const unmatched = pairPos?.unmatched ?? 0;
+  const matched = pairPos?.matched ?? 0;
   const matchedProfit =
-    pc != null && matched > 0 ? matched * (1 - pc) : null;
+    pairPos?.avgBuySum != null && matched > 0
+      ? matched * (1 - pairPos.avgBuySum)
+      : null;
 
   const histSummary = useMemo(
     () => history24hSummary(snap?.orders ?? []),
@@ -164,8 +167,6 @@ export default function App() {
     m?.upBook?.bestBidSize != null && m?.downBook?.bestBidSize != null
       ? Math.min(m.upBook.bestBidSize, m.downBook.bestBidSize)
       : null;
-  const pnlUp = pnlIfSideWins(snap, "UP");
-  const pnlDown = pnlIfSideWins(snap, "DOWN");
   const lastClosed = snap?.lastClosedWindow;
 
   return (
@@ -413,20 +414,46 @@ export default function App() {
             </article>
           </section>
 
-          <section className="pnl-row">
+          <section className="pnl-row pnl-row-single">
             <article className="pnl-card">
-              <h3>AFTER PNL IF UP (GROSS)</h3>
-              <p className="pnl-big val-green">{fmtUsd(pnlUp)}</p>
-              <p className="pnl-sub">
-                UP shares {upShares} · exposure {fmtUsd(snap?.position.exposureUsd)}
-              </p>
-            </article>
-            <article className="pnl-card">
-              <h3>AFTER PNL IF DOWN (GROSS)</h3>
-              <p className="pnl-big val-down">{fmtUsd(pnlDown)}</p>
-              <p className="pnl-sub">
-                DOWN shares {downShares} · mid {fmt(m?.downBook?.mid, 3)}
-              </p>
+              <h3>SETTLEMENT P/L (PAIR — $1 PER WINNING SHARE)</h3>
+              {pairPos && matched > 0 && pairPos.balanced ? (
+                <>
+                  <p
+                    className={`pnl-big ${
+                      (pairPos.settlementPnl ?? 0) >= 0 ? "val-green" : "val-down"
+                    }`}
+                  >
+                    {fmtUsd(pairPos.settlementPnl)}
+                  </p>
+                  <p className="pnl-sub">
+                    Same profit whether UP or DOWN wins · matched {matched} sh
+                    · avg buy sum {fmt(pairPos.avgBuySum, 3)} · cost{" "}
+                    {fmtUsd(pairPos.exposureUsd)}
+                  </p>
+                </>
+              ) : pairPos && matched > 0 && !pairPos.balanced ? (
+                <>
+                  <p className="pnl-big val-warn">Unbalanced pair</p>
+                  <p className="pnl-sub">
+                    Matched {matched} sh · extra{" "}
+                    {pairPos.unmatched} sh on{" "}
+                    {upShares > downShares ? "UP" : "DOWN"} · cost{" "}
+                    {fmtUsd(pairPos.exposureUsd)}
+                  </p>
+                  <p className="pnl-sub">
+                    If UP wins {fmtUsd(pairPos.pnlIfUpWins)} · If DOWN wins{" "}
+                    {fmtUsd(pairPos.pnlIfDownWins)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="pnl-big">{fmtUsd(pairPos?.settlementPnl ?? 0)}</p>
+                  <p className="pnl-sub">
+                    No open pair · buy UP+DOWN together when buy sum ≤ threshold
+                  </p>
+                </>
+              )}
             </article>
           </section>
 
@@ -466,10 +493,27 @@ export default function App() {
                 <span>
                   SIMULATED BALANCE {fmtUsd(virtualBal?.balanceUsd)}
                 </span>
-                <span>24h Windows —</span>
+                <span>Windows {snap?.windowsCompleted ?? 0}</span>
+                <span>
+                  Benefit (last window){" "}
+                  {lastClosed != null ? (
+                    <span
+                      className={
+                        lastClosed.profitUsd >= 0 ? "hist-benefit-pos" : "hist-benefit-neg"
+                      }
+                    >
+                      {fmtUsd(lastClosed.profitUsd)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                  {lastClosed != null ? ` · ${lastClosed.winner} won` : ""}
+                </span>
                 <span>Orders {histSummary.orders}</span>
                 <span>Spent {fmtUsd(histSummary.spent)}</span>
-                <span>Net {fmtUsd(histSummary.net)}</span>
+                <span>
+                  Total benefit {fmtUsd(snap?.pnl.realized ?? 0)}
+                </span>
               </div>
             </div>
             <div className="table-wrap">
@@ -481,6 +525,7 @@ export default function App() {
                     <th>Side</th>
                     <th>Price</th>
                     <th>Size</th>
+                    <th>Benefit</th>
                     <th>Status</th>
                     <th>Mode</th>
                   </tr>
@@ -488,7 +533,7 @@ export default function App() {
                 <tbody>
                   {displayOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="empty-row">
+                      <td colSpan={8} className="empty-row">
                         No orders yet — start the bot in paper mode to simulate
                       </td>
                     </tr>
@@ -508,6 +553,24 @@ export default function App() {
                           {fmt(o.price, 3)}
                         </td>
                         <td>{o.size}</td>
+                        <td
+                          className={
+                            o.benefitUsd != null
+                              ? o.benefitUsd >= 0
+                                ? "hist-benefit-pos"
+                                : "hist-benefit-neg"
+                              : undefined
+                          }
+                          title={
+                            o.benefitUsd != null
+                              ? o.leg === "PAIR"
+                                ? `At settlement: ${o.size} sh × $1 − cost ${fmtUsd(o.costUsd)}`
+                                : `If ${o.leg} wins: payout $${o.size} − cost ${fmtUsd(o.costUsd)}`
+                              : undefined
+                          }
+                        >
+                          {o.benefitUsd != null ? fmtUsd(o.benefitUsd) : "—"}
+                        </td>
                         <td>{o.status}</td>
                         <td>{o.simulated ? "Paper" : "Live"}</td>
                       </tr>

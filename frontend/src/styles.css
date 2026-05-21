@@ -630,10 +630,18 @@ code {
   gap: 0.65rem;
 }
 
+.pnl-row-single {
+  grid-template-columns: 1fr;
+}
+
 @media (max-width: 768px) {
   .pnl-row {
     grid-template-columns: 1fr;
   }
+}
+
+.val-warn {
+  color: var(--warn);
 }
 
 .pnl-card {
@@ -692,6 +700,14 @@ code {
   font-size: 0.8rem;
   font-family: "JetBrains Mono", monospace;
   color: var(--text);
+}
+
+.history-stats .hist-benefit-pos {
+  color: var(--green);
+}
+
+.history-stats .hist-benefit-neg {
+  color: var(--red);
 }
 
 .table-wrap {

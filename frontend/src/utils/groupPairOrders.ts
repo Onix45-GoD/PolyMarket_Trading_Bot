@@ -14,6 +14,9 @@ export interface DisplayOrderRow {
   size: number;
   status: string;
   simulated: boolean;
+  /** $ profit at window settlement (pair: same either winner). */
+  benefitUsd: number | null;
+  costUsd: number;
 }
 
 function pairStatus(up: OrderRecord, down: OrderRecord): string {
@@ -25,6 +28,15 @@ function pairStatus(up: OrderRecord, down: OrderRecord): string {
     return up.status;
   }
   return up.status;
+}
+
+/** Expected P/L when the window settles ($1 payout per winning share). */
+export function settlementBenefitUsd(
+  row: Pick<DisplayOrderRow, "price" | "size" | "status">,
+): number | null {
+  if (!isDisplayOrderFilled(row)) return null;
+  if (row.price >= 1) return 0;
+  return row.size * (1 - row.price);
 }
 
 /** Merge UP+DOWN legs with the same pairId into one dashboard row. */
@@ -52,24 +64,29 @@ export function groupOrdersForDisplay(orders: OrderRecord[]): DisplayOrderRow[] 
       up.size === down.size
     ) {
       usedPairIds.add(o.pairId);
-      rows.push({
+      const price = up.price + down.price;
+      const row = {
         key: o.pairId,
         createdAt: up.createdAt,
-        leg: "PAIR",
+        leg: "PAIR" as const,
         side: up.side,
-        price: up.price + down.price,
+        price,
         upPrice: up.price,
         downPrice: down.price,
         size: up.size,
         status: pairStatus(up, down),
         simulated: up.simulated,
-      });
+        costUsd: price * up.size,
+        benefitUsd: null as number | null,
+      };
+      row.benefitUsd = settlementBenefitUsd(row);
+      rows.push(row);
       continue;
     }
 
     if (usedPairIds.has(o.pairId)) continue;
 
-    rows.push({
+    const row = {
       key: o.id,
       createdAt: o.createdAt,
       leg: o.leg,
@@ -78,7 +95,11 @@ export function groupOrdersForDisplay(orders: OrderRecord[]): DisplayOrderRow[] 
       size: o.size,
       status: o.status,
       simulated: o.simulated,
-    });
+      costUsd: o.price * o.size,
+      benefitUsd: null as number | null,
+    };
+    row.benefitUsd = settlementBenefitUsd(row);
+    rows.push(row);
   }
 
   return rows;
@@ -88,7 +109,9 @@ export function displayOrderCost(row: DisplayOrderRow): number {
   return row.price * row.size;
 }
 
-export function isDisplayOrderFilled(row: DisplayOrderRow): boolean {
+export function isDisplayOrderFilled(
+  row: Pick<DisplayOrderRow, "status">,
+): boolean {
   return (
     row.status.includes("FILLED") ||
     row.status.includes("SUBMITTED") ||

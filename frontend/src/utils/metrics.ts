@@ -29,15 +29,57 @@ export function windowProgress(market: {
   return { pct, remainingSec, endLabel };
 }
 
-export function pnlIfSideWins(
+export interface PairPositionMetrics {
+  matched: number;
+  unmatched: number;
+  balanced: boolean;
+  /** Total $ paid for pairs (UP+DOWN legs). */
+  exposureUsd: number;
+  /** Average buy sum per matched share-pair (exposure / matched). */
+  avgBuySum: number | null;
+  /** When UP and DOWN held equally: profit is the same whichever side wins. */
+  settlementPnl: number | null;
+  pnlIfUpWins: number | null;
+  pnlIfDownWins: number | null;
+}
+
+/** P/L for pair-arb: matched pairs settle at $1 total payout per pair. */
+export function pairPositionMetrics(
   snap: SystemSnapshot | null,
-  side: "UP" | "DOWN",
-): number | null {
+): PairPositionMetrics | null {
   if (!snap) return null;
-  const shares =
-    side === "UP" ? snap.position.upShares : snap.position.downShares;
-  const payout = shares * 1;
-  return payout - snap.position.exposureUsd;
+  const { upShares, downShares, exposureUsd } = snap.position;
+  const matched = Math.min(upShares, downShares);
+  const unmatched = Math.abs(upShares - downShares);
+  const balanced = unmatched === 0;
+
+  const avgBuySum =
+    matched > 0 && exposureUsd > 0 ? exposureUsd / matched : null;
+
+  const pnlIfUpWins =
+    upShares > 0 || exposureUsd > 0 ? upShares * 1 - exposureUsd : 0;
+  const pnlIfDownWins =
+    downShares > 0 || exposureUsd > 0 ? downShares * 1 - exposureUsd : 0;
+
+  const settlementPnl =
+    matched > 0 && balanced
+      ? matched * 1 - exposureUsd
+      : matched > 0
+        ? null
+        : exposureUsd > 0
+          ? null
+          : 0;
+
+  return {
+    matched,
+    unmatched,
+    balanced,
+    exposureUsd,
+    avgBuySum,
+    settlementPnl,
+    pnlIfUpWins,
+    pnlIfDownWins,
+  };
 }
 
 export function history24hSummary(orders: SystemSnapshot["orders"]) {
