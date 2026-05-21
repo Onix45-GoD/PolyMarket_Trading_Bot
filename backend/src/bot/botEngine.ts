@@ -1,41 +1,14 @@
 import { env } from "../config/env.js";
-import { calculateSignal } from "./confidenceCalculator.js";
-import { evaluateRisk } from "../risk/riskManager.js";
-import { executeSignal } from "../execution/executionEngine.js";
+import { evaluatePairArb } from "./pairArb.js";
+import { executePairArbDecision, resetPairArbTradeState } from "./pairArbTrade.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 import type { BotMode } from "./botMode.js";
-import { isVirtualMode } from "./botMode.js";
-import type { BotStatus, MarketState } from "../types/index.js";
+import type { BotStatus, PairArbState } from "../types/index.js";
 
-const TICK_MS = 3000;
-
-function fmtTokenPrice(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return n.toFixed(4);
-}
-
-function formatTickPrices(market: MarketState): string {
-  const up =
-    market.upBook?.mid ??
-    market.upBook?.bestAsk ??
-    market.upBook?.bestBid;
-  const down =
-    market.downBook?.mid ??
-    market.downBook?.bestAsk ??
-    market.downBook?.bestBid;
-  const parts = [`up=${fmtTokenPrice(up)}`, `down=${fmtTokenPrice(down)}`];
-  const btc = market.btc.price;
-  if (btc > 0 && Number.isFinite(btc)) {
-    parts.push(`btc=$${btc.toFixed(2)}`);
-  }
-  return parts.join(" ");
-}
+const TICK_MS = env.BOT_TICK_MS;
 let timer: ReturnType<typeof setInterval> | null = null;
-let lastTradeAt = 0;
 let loggedTicksActive = false;
-const COOLDOWN_MS = 30_000;
-
 
 export function setBotStatus(status: BotStatus): void {
   systemState.patchBot({ status });
@@ -56,6 +29,14 @@ export function setBotMode(mode: BotMode): void {
   systemState.patchBot({ mode });
 }
 
+function stopForDailyLoss(): void {
+  setBotEnabled(false);
+  setBotStatus("stopped");
+  console.log(
+    `[bot] STOP — max daily loss (daily=${systemState.pnl.daily.toFixed(2)} limit=-${env.MAX_DAILY_LOSS_USD})`,
+  );
+}
+
 async function tick(): Promise<void> {
   const { status, enabled } = systemState.bot;
   const active = status === "running" && enabled;
@@ -64,55 +45,47 @@ async function tick(): Promise<void> {
     return;
   }
 
+  if (systemState.pnl.daily <= -env.MAX_DAILY_LOSS_USD) {
+    stopForDailyLoss();
+    return;
+  }
+
   if (!loggedTicksActive) {
     loggedTicksActive = true;
     console.log(
-      `[bot] trading active (status=${status}, mode=${botMode}, tick every ${TICK_MS}ms)`,
+      `[bot] pair-arb active (status=${status}, mode=${botMode}, tick ${TICK_MS}ms, slip=${env.SLIPPAGE}, maxPerTrade=${env.MAX_PAIR_ORDER_SIZE}, buyCooldown=${env.PAIR_BUY_COOLDOWN_MS}ms)`,
     );
   }
 
   const market = systemState.market;
-  const signal = calculateSignal(market);
   const tickAt = new Date().toISOString();
+  const decision = evaluatePairArb(
+    market,
+    systemState.virtualAccount.balanceUsd,
+  );
+
+  const pairArb: PairArbState = {
+    action: decision.action,
+    sum: decision.sum,
+    buySum: decision.sum,
+    askSum: decision.askSum,
+    size: decision.size,
+    reason: decision.reason,
+    timestamp: tickAt,
+  };
+
   systemState.patchBot({
-    currentSignal: signal,
+    pairArb,
     lastTickAt: tickAt,
     error: null,
   });
 
-  await appendJsonl("signals", {
+  await appendJsonl("pair_arb", {
     windowId: market.market?.conditionId,
-    signal,
+    ...pairArb,
   });
 
-  const risk = evaluateRisk(signal, market);
-  const marketSlug = market.market?.slug ?? "no-market";
-  const prices = formatTickPrices(market);
-  if (!risk.approved) {
-    console.log(
-      `[bot] tick ${tickAt} market=${marketSlug} ${prices} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → skip (${risk.reason})`,
-    );
-    return;
-  }
-
-  if (Date.now() - lastTradeAt < COOLDOWN_MS) return;
-
-  console.log(
-    `[bot] tick ${tickAt} market=${marketSlug} ${prices} signal=${signal.side} conf=${signal.confidence.toFixed(2)} → placing order (mode=${botMode})`,
-  );
-
-  const simulated = isVirtualMode(botMode);
-  const order = await executeSignal(signal, simulated);
-  if (order) {
-    lastTradeAt = Date.now();
-    console.log(
-      `[bot] order ${order.status} ${signal.side} @ ${order.price} x${order.size} simulated=${simulated}`,
-    );
-  } else {
-    console.log(
-      `[bot] tick ${tickAt} market=${marketSlug} ${prices} → execute returned no order`,
-    );
-  }
+  await executePairArbDecision(decision, "tick");
 }
 
 function ensureTickTimer(): void {
@@ -127,7 +100,6 @@ function ensureTickTimer(): void {
   console.log(`[bot] tick timer started (every ${TICK_MS}ms)`);
 }
 
-/** Called once at server boot — applies BOT_ENABLED from .env */
 export function bootBotEngine(): void {
   const autoStart = env.BOT_ENABLED;
   systemState.patchBot({
@@ -150,8 +122,8 @@ export function bootBotEngine(): void {
   }
 }
 
-/** Ensures timer is running; does not reset enabled/status (use API start/stop for that) */
 export function startBotEngine(): void {
+  resetPairArbTradeState();
   ensureTickTimer();
   console.log(
     `[bot] engine started via API → status=${systemState.bot.status} enabled=${systemState.bot.enabled}`,
@@ -162,6 +134,7 @@ export function stopBotEngine(): void {
   if (timer) clearInterval(timer);
   timer = null;
   loggedTicksActive = false;
+  resetPairArbTradeState();
   systemState.patchBot({ status: "stopped" });
   console.log("[bot] engine stopped (shutdown or stop)");
 }

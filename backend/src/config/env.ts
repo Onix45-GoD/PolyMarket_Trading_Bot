@@ -33,9 +33,17 @@ const envSchema = z.object({
     .string()
     .transform((v) => v === "true" || v === "1")
     .default("false"),
-  MAX_ORDER_SIZE_USD: z.coerce.number().default(10),
+  /** Max matched shares per single pair buy (not a per-window cap; you can buy again) */
+  MAX_PAIR_ORDER_SIZE: z.coerce.number().default(100),
+  /** Min milliseconds between successful pair buys in the same window */
+  PAIR_BUY_COOLDOWN_MS: z.coerce.number().default(2000),
   MAX_DAILY_LOSS_USD: z.coerce.number().default(50),
-  MIN_CONFIDENCE: z.coerce.number().default(0.6),
+  /** Buy when buySum (UP bid + DOWN bid) <= 1 - SLIPPAGE */
+  SLIPPAGE: z.coerce.number().default(0.02),
+  /** Bot tick interval (ms) */
+  BOT_TICK_MS: z.coerce.number().default(1000),
+  /** CLOB order book refresh interval (ms) */
+  MARKET_POLL_MS: z.coerce.number().default(2000),
   /** Starting balance for virtual (dry-run) trading */
   VIRTUAL_STARTING_BALANCE_USD: z.coerce.number().default(1000),
   GAMMA_API_URL: z.string().default("https://gamma-api.polymarket.com"),

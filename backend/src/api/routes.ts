@@ -168,9 +168,11 @@ apiRouter.get("/config", (_req, res) => {
   res.json({
     botMode: env.BOT_MODE,
     virtualStartingBalanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
-    maxOrderSizeUsd: env.MAX_ORDER_SIZE_USD,
+    maxPairOrderSize: env.MAX_PAIR_ORDER_SIZE,
     maxDailyLossUsd: env.MAX_DAILY_LOSS_USD,
-    minConfidence: env.MIN_CONFIDENCE,
+    slippage: env.SLIPPAGE,
+    botTickMs: env.BOT_TICK_MS,
+    marketPollMs: env.MARKET_POLL_MS,
     clobConfigured: Boolean(env.PRIVATE_KEY),
     publicWallet,
     proxyWallet,

@@ -165,6 +165,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .side-card {
@@ -210,6 +211,15 @@ code {
   color: var(--muted);
 }
 
+.signal-IDLE {
+  color: var(--muted);
+}
+
+.signal-BUY_PAIR {
+  color: var(--green);
+}
+
+
 .signal-dl {
   margin: 0;
   display: grid;
@@ -219,15 +229,31 @@ code {
 .signal-dl div {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
   font-size: 0.8rem;
+  min-width: 0;
 }
 
 .signal-dl dt {
   color: var(--muted);
+  flex-shrink: 1;
+  min-width: 0;
 }
+
 .signal-dl dd {
   margin: 0;
+  flex-shrink: 0;
   font-family: "JetBrains Mono", monospace;
+}
+
+.signal-dl .reason-dd {
+  font-family: inherit;
+  text-align: right;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .side-controls .btn-row-compact {
@@ -500,6 +526,15 @@ code {
 
 .bid-ask-cell.ask .ba-price {
   color: var(--orange);
+}
+
+.ba-qty {
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 0.15rem;
 }
 
 .ba-hint {

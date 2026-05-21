@@ -13,7 +13,11 @@ import {
 } from "./api/client";
 import type { BotStatus, SystemSnapshot, TradingMoneyMode } from "./types";
 import { TokenBookPrices } from "./components/TokenBookPrices";
-import { botStatusLabel, fmt, fmtUsd, shortAddr } from "./utils/format";
+import { botStatusLabel, fmt, fmtQty, fmtUsd, shortAddr } from "./utils/format";
+import {
+  formatPairArbReason,
+  pairArbActionLabel,
+} from "./utils/pairArbReason";
 import {
   history24hSummary,
   pairCost,
@@ -146,9 +150,17 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   };
 
-  const signal = bot?.currentSignal;
+  const pairArb = bot?.pairArb;
+  const pairArbReason = formatPairArbReason(pairArb?.reason, {
+    botRunning: isRunning,
+  });
+  const pairBuyQty =
+    m?.upBook?.bestBidSize != null && m?.downBook?.bestBidSize != null
+      ? Math.min(m.upBook.bestBidSize, m.downBook.bestBidSize)
+      : null;
   const pnlUp = pnlIfSideWins(snap, "UP");
   const pnlDown = pnlIfSideWins(snap, "DOWN");
+  const lastClosed = snap?.lastClosedWindow;
 
   return (
     <div className="dashboard">
@@ -230,34 +242,38 @@ export default function App() {
           </section>
 
           <section className="side-card signal-wait">
-            <h3>Waiting for signal</h3>
-            <p className={`signal-side signal-${signal?.side ?? "NONE"}`}>
-              {signal?.side ?? "NO_TRADE"}
+            <h3>Pair arb</h3>
+            <p className={`signal-side signal-${pairArb?.action ?? "IDLE"}`}>
+              {pairArbActionLabel(pairArb?.action)}
             </p>
             <dl className="signal-dl">
               <div>
-                <dt>UP mid</dt>
-                <dd>{fmt(m?.upBook?.mid, 3)}</dd>
+                <dt>Buy sum (bid)</dt>
+                <dd>{fmt(pairArb?.buySum, 4)}</dd>
               </div>
               <div>
-                <dt>DOWN mid</dt>
-                <dd>{fmt(m?.downBook?.mid, 3)}</dd>
+                <dt>Ask sum</dt>
+                <dd>{fmt(pairArb?.askSum, 4)}</dd>
               </div>
               <div>
-                <dt>Confidence</dt>
-                <dd>{fmt((signal?.confidence ?? 0) * 100, 0)}%</dd>
+                <dt>Pair buy qty (bid)</dt>
+                <dd>{fmtQty(pairBuyQty)} sh</dd>
               </div>
               <div>
-                <dt>Spot</dt>
-                <dd>${fmt(m?.btc.price)}</dd>
+                <dt>Next size</dt>
+                <dd>{pairArb?.size ?? 0} sh</dd>
               </div>
               <div>
-                <dt>Open</dt>
-                <dd>${fmt(m?.btc.startPrice)}</dd>
+                <dt>Reason</dt>
+                <dd className="reason-dd" title={pairArb?.reason ?? undefined}>
+                  {pairArbReason}
+                </dd>
               </div>
               <div>
-                <dt>Gap</dt>
-                <dd>{fmt(m?.btc.distancePct, 3)}%</dd>
+                <dt>UP / DOWN held</dt>
+                <dd>
+                  {upShares} / {downShares}
+                </dd>
               </div>
             </dl>
           </section>
@@ -411,19 +427,21 @@ export default function App() {
           <section className="metric-row five">
             <article className="metric-card sm">
               <span className="lbl">LAST CLOSED — REALIZED P/L</span>
-              <span className="val">{fmtUsd(snap?.pnl.realized)}</span>
+              <span className="val">
+                {lastClosed != null ? fmtUsd(lastClosed.profitUsd) : "—"}
+              </span>
             </article>
             <article className="metric-card sm">
               <span className="lbl">WINNER (LAST CLOSED)</span>
-              <span className="val">Pending</span>
+              <span className="val">{lastClosed?.winner ?? "—"}</span>
             </article>
             <article className="metric-card sm">
               <span className="lbl">CUMULATIVE P/L</span>
-              <span className="val">{fmtUsd(snap?.pnl.daily)}</span>
+              <span className="val">{fmtUsd(snap?.pnl.realized)}</span>
             </article>
             <article className="metric-card sm">
               <span className="lbl">WINDOWS COMPLETED</span>
-              <span className="val">—</span>
+              <span className="val">{snap?.windowsCompleted ?? 0}</span>
             </article>
             <article className="metric-card sm">
               <span className="lbl">PENDING / FAILURES</span>
@@ -453,6 +471,7 @@ export default function App() {
                 <thead>
                   <tr>
                     <th>Time</th>
+                    <th>Leg</th>
                     <th>Side</th>
                     <th>Price</th>
                     <th>Size</th>
@@ -463,7 +482,7 @@ export default function App() {
                 <tbody>
                   {(snap?.orders ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="empty-row">
+                      <td colSpan={7} className="empty-row">
                         No orders yet — start the bot in paper mode to simulate
                       </td>
                     </tr>
@@ -471,6 +490,7 @@ export default function App() {
                     (snap?.orders ?? []).slice(0, 20).map((o) => (
                       <tr key={o.id}>
                         <td>{new Date(o.createdAt).toLocaleString()}</td>
+                        <td>{o.leg ?? "—"}</td>
                         <td>{o.side}</td>
                         <td>{fmt(o.price, 3)}</td>
                         <td>{o.size}</td>

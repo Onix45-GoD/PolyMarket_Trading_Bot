@@ -6,6 +6,13 @@ export function fmt(
   return n.toFixed(digits);
 }
 
+export function fmtQty(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (n >= 1000) return n.toFixed(0);
+  if (n >= 1) return n.toFixed(1);
+  return n.toFixed(2);
+}
+
 export function fmtUsd(n: number | null | undefined, digits = 2): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const sign = n < 0 ? "-" : "";

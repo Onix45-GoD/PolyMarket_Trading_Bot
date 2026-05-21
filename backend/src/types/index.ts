@@ -13,6 +13,8 @@ export interface OrderBookSnapshot {
   asks: OrderBookLevel[];
   bestBid: number | null;
   bestAsk: number | null;
+  bestBidSize: number | null;
+  bestAskSize: number | null;
   mid: number | null;
   updatedAt: string;
 }
@@ -60,6 +62,19 @@ export interface StrategyVote {
   reason: string;
 }
 
+export type PairArbAction = "IDLE" | "BUY_PAIR";
+
+export interface PairArbState {
+  action: PairArbAction;
+  sum: number | null;
+  buySum: number | null;
+  askSum: number | null;
+  size: number;
+  reason: string;
+  timestamp: string;
+}
+
+/** @deprecated Legacy signal type — pair arb uses PairArbState */
 export interface BotSignal {
   side: SignalSide;
   confidence: number;
@@ -71,7 +86,7 @@ export interface BotState {
   status: BotStatus;
   mode: BotMode;
   enabled: boolean;
-  currentSignal: BotSignal | null;
+  pairArb: PairArbState | null;
   lastTickAt: string | null;
   error: string | null;
 }
@@ -79,6 +94,9 @@ export interface BotState {
 export interface OrderRecord {
   id: string;
   tokenId: string;
+  /** UP (YES) or DOWN (NO) leg */
+  leg: "UP" | "DOWN";
+  pairId: string;
   side: "BUY" | "SELL";
   price: number;
   size: number;
@@ -107,6 +125,23 @@ export interface VirtualAccountState {
   startingBalanceUsd: number;
 }
 
+export interface LastClosedWindowState {
+  windowId: string;
+  slug: string;
+  winner: "UP" | "DOWN";
+  upShares: number;
+  downShares: number;
+  payoutUsd: number;
+  costUsd: number;
+  profitUsd: number;
+  btcStart: number | null;
+  btcEnd: number | null;
+  closedAt: string;
+  resolutionSource?: "gamma" | "clob" | "btc";
+  upPrice?: number | null;
+  downPrice?: number | null;
+}
+
 export interface SystemSnapshot {
   market: MarketState;
   bot: BotState;
@@ -115,6 +150,8 @@ export interface SystemSnapshot {
   pnl: PnlState;
   virtualAccount: VirtualAccountState;
   connectivity: ConnectivityState;
+  lastClosedWindow: LastClosedWindowState | null;
+  windowsCompleted: number;
 }
 
 export type WsEventType =

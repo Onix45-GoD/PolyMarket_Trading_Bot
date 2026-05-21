@@ -4,9 +4,10 @@ import type { SystemSnapshot, TradingMoneyMode } from "../types";
 export interface AppConfig {
   botMode: string;
   virtualStartingBalanceUsd: number;
-  maxOrderSizeUsd: number;
+  maxPairOrderSize: number;
   maxDailyLossUsd: number;
-  minConfidence: number;
+  slippage: number;
+  botTickMs: number;
   clobConfigured: boolean;
   publicWallet: string | null;
   proxyWallet: string | null;

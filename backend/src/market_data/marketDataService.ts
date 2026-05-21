@@ -7,8 +7,13 @@ import { buildBookSnapshot } from "./orderbookLoader.js";
 import { fetchPublicOrderBooks } from "./publicOrderBook.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
+import { logPairArbSnapshot } from "./pairArbLog.js";
+import {
+  maybeSettleExpiredPaperWindow,
+  settlePaperWindowIfNeeded,
+} from "../settlement/windowSettlement.js";
 
-const POLL_MS = 2000;
+const POLL_MS = env.MARKET_POLL_MS;
 const MIN_DISCOVERY_MS = 5000;
 const MAX_DISCOVERY_BACKOFF_MS = 60_000;
 
@@ -20,6 +25,8 @@ let lastErrorLogAt = 0;
 async function refreshBooks(): Promise<void> {
   const market = systemState.market.market;
   if (!market) return;
+
+  await maybeSettleExpiredPaperWindow();
 
   try {
     let upBook;
@@ -50,6 +57,8 @@ async function refreshBooks(): Promise<void> {
     systemState.patchMarket({ upBook, downBook });
     systemState.patchConnectivity({ clob: "ok", clobError: null });
 
+    logPairArbSnapshot();
+
     await appendJsonl("market_snapshots", {
       windowId: market.conditionId,
       upBook,
@@ -70,17 +79,24 @@ async function refreshMarket(): Promise<void> {
 
   const manual = getManualMarket();
   if (manual) {
-    const prev = systemState.market.market?.conditionId;
+    const prev = systemState.market.market;
+    const btc = systemState.market.btc;
+    if (prev && prev.conditionId !== manual.conditionId) {
+      await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
+    }
     systemState.patchMarket({ market: manual });
     systemState.patchConnectivity({
       gamma: "manual",
       gammaError: null,
     });
-    if (prev !== manual.conditionId) {
+    if (!prev || prev.conditionId !== manual.conditionId) {
       console.log(`[market] Manual window: ${manual.question}`);
       console.log(
         `[market]   UP: ${manual.upTokenId} | DOWN: ${manual.downTokenId}`,
       );
+      if (systemState.position.upShares === 0 && systemState.position.downShares === 0) {
+        systemState.patchPosition({ windowId: manual.conditionId });
+      }
     }
     discoveryBackoffMs = MIN_DISCOVERY_MS;
     return;
@@ -89,15 +105,25 @@ async function refreshMarket(): Promise<void> {
   try {
     const found = await findActiveBtcUpDownMarket();
     if (found) {
-      const prev = systemState.market.market?.conditionId;
+      const prev = systemState.market.market;
+      const btc = systemState.market.btc;
+      if (prev && prev.conditionId !== found.conditionId) {
+        await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
+      }
       systemState.patchMarket({ market: found });
       systemState.patchConnectivity({ gamma: "ok", gammaError: null });
-      if (prev !== found.conditionId) {
+      if (!prev || prev.conditionId !== found.conditionId) {
         console.log(`[market] New window: ${found.question}`);
         console.log(`[market]   slug: ${found.slug}`);
         console.log(
           `[market]   end: ${found.endDate} | UP: ${found.upTokenId} | DOWN: ${found.downTokenId}`,
         );
+        if (
+          systemState.position.upShares === 0 &&
+          systemState.position.downShares === 0
+        ) {
+          systemState.patchPosition({ windowId: found.conditionId });
+        }
       }
     } else {
       systemState.patchConnectivity({
@@ -125,6 +151,9 @@ async function refreshMarket(): Promise<void> {
 }
 
 export async function startMarketDataService(): Promise<void> {
+  console.log(
+    `[market] CLOB book poll every ${POLL_MS}ms (logs ask prices + buySum even if bot stopped)`,
+  );
   await refreshMarket();
   await refreshBooks().catch(() => {});
 

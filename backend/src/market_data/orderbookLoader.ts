@@ -20,6 +20,8 @@ export function buildBookSnapshot(
   const askLevels = parseLevels(asks).sort((a, b) => a.price - b.price);
   const bestBid = bidLevels[0]?.price ?? null;
   const bestAsk = askLevels[0]?.price ?? null;
+  const bestBidSize = bidLevels[0]?.size ?? null;
+  const bestAskSize = askLevels[0]?.size ?? null;
   const last =
     lastTradePrice != null && lastTradePrice !== ""
       ? Number(lastTradePrice)
@@ -37,6 +39,8 @@ export function buildBookSnapshot(
     asks: askLevels.slice(0, 15),
     bestBid,
     bestAsk,
+    bestBidSize,
+    bestAskSize,
     mid,
     updatedAt: new Date().toISOString(),
   };

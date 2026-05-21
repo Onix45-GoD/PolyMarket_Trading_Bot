@@ -1,7 +1,9 @@
 import { env } from "../config/env.js";
+import { resetSettlementState } from "../settlement/settlementGuard.js";
 import type {
   BotState,
   ConnectivityState,
+  LastClosedWindowState,
   MarketState,
   OrderRecord,
   PnlState,
@@ -36,7 +38,7 @@ const emptyBot: BotState = {
   status: "stopped",
   mode: "dry-run",
   enabled: false,
-  currentSignal: null,
+  pairArb: null,
   lastTickAt: null,
   error: null,
 };
@@ -64,6 +66,8 @@ class SystemStateStore {
   };
 
   connectivity: ConnectivityState = { ...emptyConnectivity };
+  lastClosedWindow: LastClosedWindowState | null = null;
+  windowsCompleted = 0;
 
   getSnapshot(): SystemSnapshot {
     return {
@@ -74,6 +78,8 @@ class SystemStateStore {
       pnl: structuredClone(this.pnl),
       virtualAccount: structuredClone(this.virtualAccount),
       connectivity: structuredClone(this.connectivity),
+      lastClosedWindow: structuredClone(this.lastClosedWindow),
+      windowsCompleted: this.windowsCompleted,
     };
   }
 
@@ -82,6 +88,21 @@ class SystemStateStore {
       balanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
       startingBalanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
     };
+    this.pnl = {
+      realized: 0,
+      unrealized: 0,
+      daily: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    this.position = {
+      upShares: 0,
+      downShares: 0,
+      exposureUsd: 0,
+      windowId: null,
+    };
+    this.lastClosedWindow = null;
+    this.windowsCompleted = 0;
+    resetSettlementState();
   }
 
   patchMarket(partial: Partial<MarketState>): void {

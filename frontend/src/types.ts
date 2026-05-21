@@ -21,8 +21,20 @@ export interface SystemSnapshot {
       upTokenId: string;
       downTokenId: string;
     } | null;
-    upBook: { bestBid: number | null; bestAsk: number | null; mid: number | null } | null;
-    downBook: { bestBid: number | null; bestAsk: number | null; mid: number | null } | null;
+    upBook: {
+      bestBid: number | null;
+      bestAsk: number | null;
+      bestBidSize: number | null;
+      bestAskSize: number | null;
+      mid: number | null;
+    } | null;
+    downBook: {
+      bestBid: number | null;
+      bestAsk: number | null;
+      bestBidSize: number | null;
+      bestAskSize: number | null;
+      mid: number | null;
+    } | null;
     btc: {
       price: number;
       startPrice: number | null;
@@ -36,10 +48,14 @@ export interface SystemSnapshot {
     status: string;
     mode: string;
     enabled: boolean;
-    currentSignal: {
-      side: SignalSide;
-      confidence: number;
-      votes: { strategy: string; side: SignalSide; score: number; reason: string }[];
+    pairArb: {
+      action: "IDLE" | "BUY_PAIR";
+      sum: number | null;
+      buySum: number | null;
+      askSum: number | null;
+      size: number;
+      reason: string;
+      timestamp: string;
     } | null;
     lastTickAt: string | null;
     error: string | null;
@@ -47,6 +63,8 @@ export interface SystemSnapshot {
   orders: {
     id: string;
     tokenId: string;
+    leg: "UP" | "DOWN";
+    pairId: string;
     side: string;
     price: number;
     size: number;
@@ -54,9 +72,31 @@ export interface SystemSnapshot {
     simulated: boolean;
     createdAt: string;
   }[];
-  position: { upShares: number; downShares: number; exposureUsd: number };
+  position: {
+    upShares: number;
+    downShares: number;
+    exposureUsd: number;
+    windowId?: string | null;
+  };
   pnl: { realized: number; unrealized: number; daily: number };
   virtualAccount: { balanceUsd: number; startingBalanceUsd: number };
+  lastClosedWindow: {
+    windowId: string;
+    slug: string;
+    winner: "UP" | "DOWN";
+    upShares: number;
+    downShares: number;
+    payoutUsd: number;
+    costUsd: number;
+    profitUsd: number;
+    btcStart: number | null;
+    btcEnd: number | null;
+    closedAt: string;
+    resolutionSource?: "gamma" | "clob" | "btc";
+    upPrice?: number | null;
+    downPrice?: number | null;
+  } | null;
+  windowsCompleted: number;
 }
 
 export type TradingMoneyMode = "virtual" | "real";

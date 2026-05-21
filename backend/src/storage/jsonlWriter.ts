@@ -10,9 +10,11 @@ const files: Record<string, string> = {
   orders: "orders.jsonl",
   fills: "fills.jsonl",
   signals: "signals.jsonl",
+  pair_arb: "pair_arb.jsonl",
   market_snapshots: "market_snapshots.jsonl",
   positions: "positions.jsonl",
   pnl: "pnl.jsonl",
+  settlements: "settlements.jsonl",
   errors: "errors.jsonl",
 };
 

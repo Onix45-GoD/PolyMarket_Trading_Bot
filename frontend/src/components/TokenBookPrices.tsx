@@ -1,8 +1,10 @@
-import { fmt } from "../utils/format";
+import { fmt, fmtQty } from "../utils/format";
 
 export interface BookPrices {
   bestBid: number | null;
   bestAsk: number | null;
+  bestBidSize: number | null;
+  bestAskSize: number | null;
   mid: number | null;
 }
 
@@ -29,12 +31,14 @@ export function TokenBookPrices({ title, book, variant, errorHint }: Props) {
         <div className={`bid-ask-cell bid ${hasBid ? "" : "empty"}`}>
           <span className="ba-label">Bid</span>
           <span className="ba-price">{fmt(book?.bestBid, 3)}</span>
-          <span className="ba-hint">Sell at (bid)</span>
+          <span className="ba-qty">{fmtQty(book?.bestBidSize)} sh</span>
+          <span className="ba-hint">Buy signal (bid)</span>
         </div>
         <div className={`bid-ask-cell ask ${hasAsk ? "" : "empty"}`}>
           <span className="ba-label">Ask</span>
           <span className="ba-price">{fmt(book?.bestAsk, 3)}</span>
-          <span className="ba-hint">Buy at (ask)</span>
+          <span className="ba-qty">{fmtQty(book?.bestAskSize)} sh</span>
+          <span className="ba-hint">Ask (reference)</span>
         </div>
       </div>
       <div className="ba-footer">
@@ -47,12 +51,6 @@ export function TokenBookPrices({ title, book, variant, errorHint }: Props) {
       </div>
       {!hasBid && !hasAsk && (
         <p className="token-missing">{errorHint ?? "No book data yet"}</p>
-      )}
-      {hasBid && !hasAsk && (
-        <p className="token-missing">Ask side empty — thin book</p>
-      )}
-      {!hasBid && hasAsk && (
-        <p className="token-missing">Bid side empty — thin book</p>
       )}
     </article>
   );
