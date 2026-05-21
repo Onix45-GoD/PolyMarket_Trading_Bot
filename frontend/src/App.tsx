@@ -511,9 +511,6 @@ export default function App() {
                 </span>
                 <span>Orders {histSummary.orders}</span>
                 <span>Spent {fmtUsd(histSummary.spent)}</span>
-                <span>
-                  Total benefit {fmtUsd(snap?.pnl.realized ?? 0)}
-                </span>
               </div>
             </div>
             <div className="table-wrap">
