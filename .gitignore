@@ -33,6 +33,7 @@ coverage/
 .nyc_output/
 
 # Runtime / bot history (local data)
+backend/.runtime/
 backend/history/*.jsonl
 !backend/history/.gitkeep
 

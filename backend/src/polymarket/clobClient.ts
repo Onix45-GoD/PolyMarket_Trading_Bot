@@ -46,6 +46,7 @@ export async function getClobClient(): Promise<ClobClient | null> {
   client = new ClobClient({
     ...base,
     creds,
+    throwOnError: true,
     ...(env.POLY_BUILDER_CODE
       ? { builderConfig: { builderCode: env.POLY_BUILDER_CODE } }
       : {}),

@@ -3,8 +3,7 @@ import { executePairBuy } from "../execution/executionEngine.js";
 import { hasOpenLiveOrders } from "../execution/liveOrderTracker.js";
 import { evaluatePairRisk } from "../risk/riskManager.js";
 import { systemState } from "../state/systemState.js";
-import { isVirtualMode } from "./botMode.js";
-import type { BotMode } from "./botMode.js";
+import { getRuntimeBotMode, isVirtualMode } from "./botMode.js";
 import type { PairArbDecision } from "./pairArb.js";
 
 function botIsActive(): boolean {
@@ -32,9 +31,12 @@ export function resolveSkipReason(decision: PairArbDecision): string {
 
 /** Min ms between successful pair buys in the same window (multiple buys allowed). */
 let lastBuyAtMs = 0;
+/** Prevent overlapping live pair posts (market poll + tick used to fire 3–4 at once). */
+let livePairInFlight = false;
 
 export function resetPairArbTradeState(): void {
   lastBuyAtMs = 0;
+  livePairInFlight = false;
 }
 
 /**
@@ -62,22 +64,32 @@ export async function executePairArbDecision(
   const market = systemState.market;
   const slug = market.market?.slug ?? "no-market";
   const at = new Date().toISOString();
-  const mode = systemState.bot.mode as BotMode;
+  const mode = getRuntimeBotMode();
   const simulated = isVirtualMode(mode);
 
-  if (
-    !simulated &&
-    env.LIVE_BLOCK_WHILE_OPEN &&
-    hasOpenLiveOrders()
-  ) {
-    return;
+  if (!simulated) {
+    if (livePairInFlight) {
+      return;
+    }
+    if (env.LIVE_BLOCK_WHILE_OPEN && hasOpenLiveOrders()) {
+      return;
+    }
+    livePairInFlight = true;
+    lastBuyAtMs = Date.now();
   }
 
   console.log(
-    `[bot] ${source} ${at} ${slug} → BUY_PAIR x${decision.size} (mode=${mode}, maxPerTrade=${env.MAX_PAIR_ORDER_SIZE})`,
+    `[bot] ${source} ${at} ${slug} → BUY_PAIR x${decision.size} (mode=${mode}, ${simulated ? "PAPER/simulated" : "LIVE/CLOB"}, maxPerTrade=${env.MAX_PAIR_ORDER_SIZE})`,
   );
 
-  const result = await executePairBuy(decision.size, simulated);
+  let result: Awaited<ReturnType<typeof executePairBuy>>;
+  try {
+    result = await executePairBuy(decision.size, simulated);
+  } finally {
+    if (!simulated) {
+      livePairInFlight = false;
+    }
+  }
   if (result?.ok) {
     lastBuyAtMs = Date.now();
     console.log(

@@ -1,7 +1,12 @@
 import { OrderType, Side } from "@polymarket/clob-client-v2";
 import { env } from "../config/env.js";
 import { getBtcDirection } from "../btc_price/btcDirection.js";
+import { getLiveCollateralBalanceUsd } from "../polymarket/clobBalance.js";
 import { getClobClient } from "../polymarket/clobClient.js";
+import {
+  isLocalPlaceholderOrderId,
+  parseOrderPostResponse,
+} from "../polymarket/clobOrderResponse.js";
 import type { OrderRecord } from "../types/index.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
@@ -130,6 +135,30 @@ export async function executePairBuy(
     return { pairId, orders: [upOrder, downOrder], ok: false };
   }
 
+  const bal = await getLiveCollateralBalanceUsd();
+  if (bal.ok) {
+    console.log(
+      `[live] Polymarket USDC balance ≈ $${bal.balanceUsd.toFixed(2)} (proxy/funder wallet, not MetaMask ETH)`,
+    );
+    if (bal.balanceUsd < cost * 1.01) {
+      console.warn(
+        `[live] skip BUY_PAIR — need ~$${cost.toFixed(2)} USDC, have $${bal.balanceUsd.toFixed(2)}`,
+      );
+      upOrder.status = "LIVE_REJECTED_BALANCE";
+      downOrder.status = "LIVE_REJECTED_BALANCE";
+      systemState.addOrder(upOrder);
+      systemState.addOrder(downOrder);
+      await appendJsonl(
+        "orders",
+        { pairId, cost, balanceUsd: bal.balanceUsd, reason: "insufficient_collateral" },
+        historyMode,
+      );
+      return { pairId, orders: [upOrder, downOrder], ok: false };
+    }
+  } else {
+    console.warn(`[live] could not read USDC balance: ${bal.error ?? "unknown"}`);
+  }
+
   const orderType =
     env.LIVE_ORDER_TYPE === "GTC" ? OrderType.GTC : OrderType.FOK;
 
@@ -143,7 +172,7 @@ export async function executePairBuy(
           side: Side.BUY,
         },
         { tickSize: "0.01", negRisk: false },
-        // SDK types omit FOK for limits; Polymarket accepts it at runtime.
+        // SDK typings only allow GTC/GTD; FOK is accepted at runtime.
         orderType as OrderType.GTC,
       ),
       clob.createAndPostOrder(
@@ -157,10 +186,44 @@ export async function executePairBuy(
         orderType as OrderType.GTC,
       ),
     ]);
-    upOrder.id = (upResp as { orderID?: string }).orderID ?? upOrder.id;
-    downOrder.id = (downResp as { orderID?: string }).orderID ?? downOrder.id;
+
+    const upParsed = parseOrderPostResponse(upResp);
+    const downParsed = parseOrderPostResponse(downResp);
+    console.log(
+      `[live] CLOB POST UP → id=${upParsed.orderId ?? "MISSING"} success=${upParsed.success} status=${upParsed.status ?? "—"} err=${upParsed.errorMsg ?? "—"}`,
+    );
+    console.log(
+      `[live] CLOB POST DOWN → id=${downParsed.orderId ?? "MISSING"} success=${downParsed.success} status=${downParsed.status ?? "—"} err=${downParsed.errorMsg ?? "—"}`,
+    );
+
+    if (!upParsed.success || !downParsed.success || !upParsed.orderId || !downParsed.orderId) {
+      upOrder.status = "LIVE_REJECTED_CLOB";
+      downOrder.status = "LIVE_REJECTED_CLOB";
+      systemState.addOrder(upOrder);
+      systemState.addOrder(downOrder);
+      await appendJsonl("errors", {
+        context: "executePairBuy_clob_post",
+        pairId,
+        up: upParsed,
+        down: downParsed,
+      });
+      return { pairId, orders: [upOrder, downOrder], ok: false };
+    }
+
+    upOrder.id = upParsed.orderId;
+    downOrder.id = downParsed.orderId;
     upOrder.status = "LIVE_SUBMITTED";
     downOrder.status = "LIVE_SUBMITTED";
+
+    if (
+      isLocalPlaceholderOrderId(upOrder.id) ||
+      isLocalPlaceholderOrderId(downOrder.id)
+    ) {
+      console.error(
+        `[live] BUG: CLOB returned no real order id — would orphan exchange orders`,
+      );
+      return { pairId, orders: [upOrder, downOrder], ok: false };
+    }
     systemState.addOrder(upOrder);
     systemState.addOrder(downOrder);
 

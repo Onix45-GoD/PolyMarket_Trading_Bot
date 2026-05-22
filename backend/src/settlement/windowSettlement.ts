@@ -2,8 +2,7 @@ import type { ActiveMarket, LastClosedWindowState } from "../types/index.js";
 import { resetPairArbTradeState } from "../bot/pairArbTrade.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
-import { isVirtualMode } from "../bot/botMode.js";
-import type { BotMode } from "../bot/botMode.js";
+import { getRuntimeBotMode, isVirtualMode } from "../bot/botMode.js";
 import {
   resolveWindowWinnerForMarket,
   type WindowWinner,
@@ -38,7 +37,7 @@ export async function settlePaperWindow(
   btcStart: number | null,
   btcEnd: number | null,
 ): Promise<LastClosedWindowState | null> {
-  if (!isVirtualMode(systemState.bot.mode as BotMode)) {
+  if (!isVirtualMode(getRuntimeBotMode())) {
     return null;
   }
 
@@ -185,7 +184,7 @@ export async function settlePaperWindowIfNeeded(
 /** Settle when endDate passed but Gamma still returns same market id. */
 export async function maybeSettleExpiredPaperWindow(): Promise<void> {
   const market = systemState.market.market;
-  if (!market || !isVirtualMode(systemState.bot.mode as BotMode)) return;
+  if (!market || !isVirtualMode(getRuntimeBotMode())) return;
   if (!hasOpenPaperPosition()) return;
   if (paperPosition().windowId !== market.conditionId) return;
 

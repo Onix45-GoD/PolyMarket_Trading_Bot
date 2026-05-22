@@ -16,8 +16,7 @@ import {
   cancelAllOpenLiveOrders,
   enforceLiveOrderCancelRules,
 } from "../execution/liveOrderCancel.js";
-import { isVirtualMode } from "../bot/botMode.js";
-import type { BotMode } from "../bot/botMode.js";
+import { getRuntimeBotMode, isVirtualMode } from "../bot/botMode.js";
 
 const POLL_MS = env.MARKET_POLL_MS;
 const MIN_DISCOVERY_MS = 5000;
@@ -89,7 +88,7 @@ async function refreshMarket(): Promise<void> {
     const prev = systemState.market.market;
     const btc = systemState.market.btc;
     if (prev && prev.conditionId !== manual.conditionId) {
-      if (!isVirtualMode(systemState.bot.mode as BotMode)) {
+      if (!isVirtualMode(getRuntimeBotMode())) {
         await cancelAllOpenLiveOrders("window_switch");
       }
       await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
@@ -119,7 +118,7 @@ async function refreshMarket(): Promise<void> {
       const prev = systemState.market.market;
       const btc = systemState.market.btc;
       if (prev && prev.conditionId !== found.conditionId) {
-        if (!isVirtualMode(systemState.bot.mode as BotMode)) {
+        if (!isVirtualMode(getRuntimeBotMode())) {
           await cancelAllOpenLiveOrders("window_switch");
         }
         await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);

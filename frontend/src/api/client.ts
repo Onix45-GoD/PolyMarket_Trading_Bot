@@ -63,23 +63,51 @@ export async function botStop() {
   return botAction("/bot/stop", "STOP");
 }
 
+async function uiAction<T>(
+  path: string,
+  label: string,
+  init?: RequestInit,
+): Promise<T> {
+  console.log(`[ui] ${label} → POST ${API_BASE}${path}`);
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", ...init });
+  const data = await res.json();
+  if (!res.ok) {
+    console.error(`[ui] ${label} failed`, res.status, data);
+    throw new Error(
+      typeof data?.error === "string" ? data.error : `${label} failed (${res.status})`,
+    );
+  }
+  console.log(`[ui] ${label} ok`, data);
+  return data as T;
+}
+
 export async function setBotMode(mode: TradingMoneyMode) {
-  return fetch(`${API_BASE}/bot/mode`, {
-    method: "POST",
+  return uiAction<SystemSnapshot["bot"]>("/bot/mode", `MODE → ${mode}`, {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ mode }),
-  }).then((r) => r.json());
+  });
 }
 
 export async function resetVirtualBalance() {
-  return fetch(`${API_BASE}/bot/reset-virtual-balance`, {
-    method: "POST",
-  }).then((r) => r.json());
+  return uiAction<{ balanceUsd: number }>(
+    "/bot/reset-virtual-balance",
+    "RESET paper balance",
+  );
 }
 
-export async function cancelAllOrders() {
-  return fetch(`${API_BASE}/orders/cancel-all`, { method: "POST" }).then((r) =>
-    r.json(),
+export interface CancelAllOrdersResult {
+  ok: boolean;
+  mode?: string;
+  trackedCancelled?: number;
+  ordersMarkedCancelled?: number;
+  clob?: unknown;
+  error?: string;
+}
+
+export async function cancelAllOrders(): Promise<CancelAllOrdersResult> {
+  return uiAction<CancelAllOrdersResult>(
+    "/orders/cancel-all",
+    "CANCEL ALL orders",
   );
 }
 

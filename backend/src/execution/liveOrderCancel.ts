@@ -1,9 +1,10 @@
 import { env } from "../config/env.js";
 import { getBtcDirection } from "../btc_price/btcDirection.js";
 import { getClobClient } from "../polymarket/clobClient.js";
+import { isLocalPlaceholderOrderId } from "../polymarket/clobOrderResponse.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
-import { isVirtualMode, type BotMode } from "../bot/botMode.js";
+import { getRuntimeBotMode, isVirtualMode } from "../bot/botMode.js";
 import {
   getOpenLiveOrders,
   getOpenLiveOrdersForPair,
@@ -60,6 +61,12 @@ async function syncOrderFill(tracked: TrackedLiveOrder): Promise<boolean> {
 }
 
 async function cancelOnClob(orderId: string): Promise<boolean> {
+  if (isLocalPlaceholderOrderId(orderId)) {
+    console.error(
+      `[live] cancel skipped — not a CLOB order id (${orderId.slice(0, 24)}…); check POST response parsing`,
+    );
+    return false;
+  }
   const clob = await getClobClient();
   if (!clob) return false;
   try {
@@ -111,9 +118,19 @@ export async function cancelLivePair(
 
 export async function cancelAllOpenLiveOrders(
   reason: LiveCancelReason,
-): Promise<void> {
+): Promise<{ tracked: number; cancelled: number }> {
   const legs = getOpenLiveOrders();
+  const tracked = legs.length;
+  if (tracked === 0) {
+    console.log(`[live] cancel-all (tracker) reason=${reason} — no open tracked orders`);
+    return { tracked: 0, cancelled: 0 };
+  }
+  console.log(
+    `[live] cancel-all (tracker) reason=${reason} — ${tracked} order(s): ${legs.map((t) => `${t.leg}:${t.orderId.slice(0, 10)}…`).join(", ")}`,
+  );
   await Promise.all(legs.map((t) => cancelTracked(t, reason)));
+  console.log(`[live] cancel-all (tracker) done — cleared ${tracked} tracked order(s)`);
+  return { tracked, cancelled: tracked };
 }
 
 function secondsToMarketEnd(): number | null {
@@ -131,7 +148,7 @@ function shouldCancelForBtc(tracked: TrackedLiveOrder): boolean {
 
 /** Poll open live orders: fills, timeout, expiry, BTC direction flip. */
 export async function enforceLiveOrderCancelRules(): Promise<void> {
-  if (isVirtualMode(systemState.bot.mode as BotMode)) {
+  if (isVirtualMode(getRuntimeBotMode())) {
     return;
   }
 

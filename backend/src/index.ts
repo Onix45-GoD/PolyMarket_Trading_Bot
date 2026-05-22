@@ -38,7 +38,7 @@ const server = app.listen(env.API_PORT, env.API_HOST, async () => {
   startBtcPriceFeed();
   await startMarketDataService();
   console.log("[server] market data ready — booting bot engine");
-  bootBotEngine();
+  await bootBotEngine();
   startLiveOrderWatch();
 });
 

@@ -132,17 +132,52 @@ export default function App() {
     const switchingToPaper = mode === "virtual";
     if (switchingToPaper === isVirtual) return;
 
+    console.log("[ui] Paper/Live button → mode=%s", mode);
     try {
       if (isRunning) {
         await botStop();
-        console.log("[bot] Stopped before switching to %s mode", mode);
+        console.log("[ui] Stopped bot before mode switch → %s", mode);
       }
-      await setBotMode(mode);
-      console.log("[bot] Mode set to %s", mode);
+      const botState = await setBotMode(mode);
+      console.log(
+        "[ui] Mode is now %s (%s)",
+        botState.mode,
+        botState.mode === "dry-run" ? "paper" : "live",
+      );
       await refresh();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error("[bot] Mode change failed:", msg);
+      console.error("[ui] Mode change failed:", msg);
+      setError(msg);
+    }
+  };
+
+  const handleResetVirtualBalance = async () => {
+    console.log("[ui] Reset paper balance button clicked");
+    try {
+      const acct = await resetVirtualBalance();
+      console.log("[ui] Paper balance reset → $%s", acct.balanceUsd);
+      await refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[ui] Reset paper balance failed:", msg);
+      setError(msg);
+    }
+  };
+
+  const handleCancelAllOrders = async () => {
+    console.log("[ui] Cancel all orders button clicked (live mode)");
+    try {
+      const result = await cancelAllOrders();
+      console.log(
+        "[ui] Cancel all orders done — tracked=%s, marked=%s",
+        result.trackedCancelled ?? 0,
+        result.ordersMarkedCancelled ?? 0,
+      );
+      await refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[ui] Cancel all orders failed:", msg);
       setError(msg);
     }
   };
@@ -329,7 +364,7 @@ export default function App() {
               <button
                 type="button"
                 className="secondary full"
-                onClick={() => resetVirtualBalance().then(refresh)}
+                onClick={handleResetVirtualBalance}
               >
                 Reset paper balance
               </button>
@@ -338,7 +373,7 @@ export default function App() {
               <button
                 type="button"
                 className="danger full"
-                onClick={() => cancelAllOrders().then(refresh)}
+                onClick={handleCancelAllOrders}
               >
                 Cancel all orders
               </button>
@@ -490,9 +525,11 @@ export default function App() {
                 {isVirtual ? "PAPER TRADING" : "LIVE TRADING"} — TRADING HISTORY
               </h2>
               <div className="history-stats">
-                <span>
-                  SIMULATED BALANCE {fmtUsd(virtualBal?.balanceUsd)}
-                </span>
+                {isVirtual && (
+                  <span>
+                    SIMULATED BALANCE {fmtUsd(virtualBal?.balanceUsd)}
+                  </span>
+                )}
                 <span>Windows {snap?.windowsCompleted ?? 0}</span>
                 <span>
                   Benefit (last window){" "}
