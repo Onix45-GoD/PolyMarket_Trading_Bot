@@ -1,4 +1,5 @@
-import { Side } from "@polymarket/clob-client-v2";
+import { OrderType, Side } from "@polymarket/clob-client-v2";
+import { env } from "../config/env.js";
 import { getBtcDirection } from "../btc_price/btcDirection.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import type { OrderRecord } from "../types/index.js";
@@ -6,6 +7,10 @@ import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 import type { HistoryMode } from "../storage/historyMode.js";
 import { registerLivePairOrders } from "./liveOrderTracker.js";
+import {
+  abortUnbalancedLivePair,
+  waitForLivePairFill,
+} from "./livePairFill.js";
 
 export interface PairExecutionResult {
   pairId: string;
@@ -125,6 +130,9 @@ export async function executePairBuy(
     return { pairId, orders: [upOrder, downOrder], ok: false };
   }
 
+  const orderType =
+    env.LIVE_ORDER_TYPE === "GTC" ? OrderType.GTC : OrderType.FOK;
+
   try {
     const [upResp, downResp] = await Promise.all([
       clob.createAndPostOrder(
@@ -135,6 +143,8 @@ export async function executePairBuy(
           side: Side.BUY,
         },
         { tickSize: "0.01", negRisk: false },
+        // SDK types omit FOK for limits; Polymarket accepts it at runtime.
+        orderType as OrderType.GTC,
       ),
       clob.createAndPostOrder(
         {
@@ -144,6 +154,7 @@ export async function executePairBuy(
           side: Side.BUY,
         },
         { tickSize: "0.01", negRisk: false },
+        orderType as OrderType.GTC,
       ),
     ]);
     upOrder.id = (upResp as { orderID?: string }).orderID ?? upOrder.id;
@@ -169,10 +180,26 @@ export async function executePairBuy(
         bidUp,
         bidDown,
         btcDirection: btcDir,
+        orderType: env.LIVE_ORDER_TYPE,
       },
       historyMode,
     );
-    return { pairId, orders: [upOrder, downOrder], ok: true };
+
+    const fill = await waitForLivePairFill(pairId, size);
+    if (fill.ok) {
+      console.log(
+        `[live] pair ${pairId} both legs filled x${fill.size} (${env.LIVE_ORDER_TYPE})`,
+      );
+      return { pairId, orders: [upOrder, downOrder], ok: true };
+    }
+
+    console.warn(`[live] pair ${pairId} not fully filled: ${fill.reason}`);
+    await abortUnbalancedLivePair(pairId, fill.reason);
+    upOrder.status = "LIVE_PAIR_INCOMPLETE";
+    downOrder.status = "LIVE_PAIR_INCOMPLETE";
+    systemState.updateOrder(upOrder.id, { status: upOrder.status });
+    systemState.updateOrder(downOrder.id, { status: downOrder.status });
+    return { pairId, orders: [upOrder, downOrder], ok: false };
   } catch (err) {
     upOrder.status = "FAILED";
     downOrder.status = "FAILED";

@@ -4,56 +4,20 @@ import { getClobClient } from "../polymarket/clobClient.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 import { isVirtualMode, type BotMode } from "../bot/botMode.js";
-import type { BtcDirection } from "../btc_price/btcDirection.js";
 import {
   getOpenLiveOrders,
   getOpenLiveOrdersForPair,
   removeLiveOrder,
-  addLiveFill,
   type LiveCancelReason,
   type TrackedLiveOrder,
 } from "./liveOrderTracker.js";
+import {
+  clobFillState,
+  isClobCancelled,
+  isClobFilled,
+} from "./liveClobFill.js";
 
 let watchTimer: ReturnType<typeof setInterval> | null = null;
-
-function clobOrderStatus(raw: unknown): string {
-  return String((raw as { status?: string })?.status ?? "").toUpperCase();
-}
-
-function clobSizeMatched(raw: unknown): number {
-  const o = raw as {
-    size_matched?: string | number;
-    sizeMatched?: string | number;
-  };
-  return Number(o.size_matched ?? o.sizeMatched ?? 0);
-}
-
-function clobOriginalSize(raw: unknown): number {
-  const o = raw as {
-    original_size?: string | number;
-    originalSize?: string | number;
-    size?: string | number;
-  };
-  return Number(o.original_size ?? o.originalSize ?? o.size ?? 0);
-}
-
-function isClobFilled(raw: unknown): boolean {
-  const status = clobOrderStatus(raw);
-  if (
-    status.includes("MATCHED") ||
-    status.includes("FILLED") ||
-    status.includes("EXECUTED")
-  ) {
-    return true;
-  }
-  const matched = clobSizeMatched(raw);
-  const size = clobOriginalSize(raw);
-  return size > 0 && matched >= size * 0.999;
-}
-
-function isClobCancelled(raw: unknown): boolean {
-  return clobOrderStatus(raw).includes("CANCEL");
-}
 
 function statusForCancel(reason: LiveCancelReason): string {
   switch (reason) {
@@ -72,31 +36,7 @@ function statusForCancel(reason: LiveCancelReason): string {
   }
 }
 
-function applyFillToPosition(tracked: TrackedLiveOrder, delta: number): void {
-  if (delta <= 0) return;
-  const cost = delta * tracked.price;
-  const pos = systemState.live.position;
-  if (tracked.leg === "UP") {
-    systemState.patchPosition(
-      {
-        upShares: pos.upShares + delta,
-        exposureUsd: pos.exposureUsd + cost,
-        windowId: tracked.windowId,
-      },
-      "live",
-    );
-  } else {
-    systemState.patchPosition(
-      {
-        downShares: pos.downShares + delta,
-        exposureUsd: pos.exposureUsd + cost,
-        windowId: tracked.windowId,
-      },
-      "live",
-    );
-  }
-}
-
+/** Sync fill sizes only — position updates when pair is fully confirmed. */
 async function syncOrderFill(tracked: TrackedLiveOrder): Promise<boolean> {
   const clob = await getClobClient();
   if (!clob) return false;
@@ -108,16 +48,9 @@ async function syncOrderFill(tracked: TrackedLiveOrder): Promise<boolean> {
       return true;
     }
 
-    const matched = clobSizeMatched(raw);
-    const delta = matched - tracked.filledSize;
-    if (delta > 0) {
-      addLiveFill(tracked.orderId, delta);
-      applyFillToPosition(tracked, delta);
-    }
+    tracked.filledSize = clobFillState(raw).matched;
 
     if (isClobFilled(raw)) {
-      systemState.updateOrder(tracked.orderId, { status: "LIVE_FILLED" });
-      removeLiveOrder(tracked.orderId);
       return true;
     }
     return false;
@@ -196,7 +129,7 @@ function shouldCancelForBtc(tracked: TrackedLiveOrder): boolean {
   return tracked.btcDirection !== current;
 }
 
-/** Poll open live orders: fills, 1–2s timeout, expiry, BTC direction flip. */
+/** Poll open live orders: fills, timeout, expiry, BTC direction flip. */
 export async function enforceLiveOrderCancelRules(): Promise<void> {
   if (isVirtualMode(systemState.bot.mode as BotMode)) {
     return;
@@ -224,7 +157,11 @@ export async function enforceLiveOrderCancelRules(): Promise<void> {
     console.log(
       `[live] market expires in ${secToEnd.toFixed(0)}s — cancelling ${remaining.length} open order(s)`,
     );
-    await cancelAllOpenLiveOrders("near_expiry");
+    const pairIds = [...new Set(remaining.map((r) => r.pairId))];
+    const { abortUnbalancedLivePair } = await import("./livePairFill.js");
+    for (const pairId of pairIds) {
+      await abortUnbalancedLivePair(pairId, "near_expiry");
+    }
     return;
   }
 
@@ -232,23 +169,27 @@ export async function enforceLiveOrderCancelRules(): Promise<void> {
     for (const tracked of getOpenLiveOrders()) {
       if (shouldCancelForBtc(tracked)) {
         console.log(
-          `[live] BTC direction ${tracked.btcDirection} → ${currentBtc} — cancel pair ${tracked.pairId}`,
+          `[live] BTC direction ${tracked.btcDirection} → ${currentBtc} — abort pair ${tracked.pairId}`,
         );
-        await cancelLivePair(tracked.pairId, "btc_direction");
+        const { abortUnbalancedLivePair } = await import("./livePairFill.js");
+        await abortUnbalancedLivePair(tracked.pairId, "btc_direction");
       }
     }
   }
 
+  const seenPairs = new Set<string>();
   for (const tracked of getOpenLiveOrders()) {
+    if (seenPairs.has(tracked.pairId)) continue;
+    seenPairs.add(tracked.pairId);
     const age = now - tracked.submittedAtMs;
     if (age >= env.LIVE_ORDER_CANCEL_MS) {
       console.log(
-        `[live] order unfilled ${age}ms — cancel pair ${tracked.pairId}`,
+        `[live] pair unfilled ${age}ms — abort ${tracked.pairId}`,
       );
-      await cancelLivePair(tracked.pairId, "timeout");
+      const { abortUnbalancedLivePair } = await import("./livePairFill.js");
+      await abortUnbalancedLivePair(tracked.pairId, "timeout");
     }
   }
-
 }
 
 export function startLiveOrderWatch(): void {
@@ -262,7 +203,9 @@ export function startLiveOrderWatch(): void {
       );
     });
   }, ms);
-  console.log(`[live] order watch every ${ms}ms (cancel after ${env.LIVE_ORDER_CANCEL_MS}ms)`);
+  console.log(
+    `[live] order watch every ${ms}ms (FOK/${env.LIVE_ORDER_TYPE}, confirm ${env.LIVE_PAIR_CONFIRM_MS}ms, cancel ${env.LIVE_ORDER_CANCEL_MS}ms)`,
+  );
 }
 
 export function stopLiveOrderWatch(): void {

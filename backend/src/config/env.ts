@@ -55,6 +55,15 @@ const envSchema = z.object({
     .string()
     .transform((v) => v !== "false" && v !== "0")
     .default("true"),
+  /** Live: GTC (resting) or FOK (fill entire size now or cancel) */
+  LIVE_ORDER_TYPE: z.enum(["FOK", "GTC"]).default("FOK"),
+  /** Live: ms to wait after submit for both legs to fully fill */
+  LIVE_PAIR_CONFIRM_MS: z.coerce.number().default(1500),
+  /** Live: market-sell a single filled leg if pair aborts unbalanced */
+  LIVE_UNWIND_ONE_LEG: z
+    .string()
+    .transform((v) => v !== "false" && v !== "0")
+    .default("true"),
   /** Starting balance for virtual (dry-run) trading */
   VIRTUAL_STARTING_BALANCE_USD: z.coerce.number().default(1000),
   GAMMA_API_URL: z.string().default("https://gamma-api.polymarket.com"),

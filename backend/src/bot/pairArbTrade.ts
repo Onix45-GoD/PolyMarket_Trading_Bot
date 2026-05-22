@@ -86,7 +86,8 @@ export async function executePairArbDecision(
     return;
   }
 
-  console.log(
-    `[bot] BUY_PAIR failed x${decision.size} (balance, books, or CLOB client)`,
-  );
+  const detail = simulated
+    ? "(balance, books, or CLOB client)"
+    : "(pair not fully filled, rejected, or CLOB error — see LIVE_PAIR_INCOMPLETE)";
+  console.log(`[bot] BUY_PAIR failed x${decision.size} ${detail}`);
 }
