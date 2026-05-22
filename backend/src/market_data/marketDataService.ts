@@ -104,7 +104,8 @@ async function refreshMarket(): Promise<void> {
       console.log(
         `[market]   UP: ${manual.upTokenId} | DOWN: ${manual.downTokenId}`,
       );
-      if (systemState.position.upShares === 0 && systemState.position.downShares === 0) {
+      const activePos = systemState.activeSession().position;
+      if (activePos.upShares === 0 && activePos.downShares === 0) {
         systemState.patchPosition({ windowId: manual.conditionId });
       }
     }
@@ -131,10 +132,8 @@ async function refreshMarket(): Promise<void> {
         console.log(
           `[market]   end: ${found.endDate} | UP: ${found.upTokenId} | DOWN: ${found.downTokenId}`,
         );
-        if (
-          systemState.position.upShares === 0 &&
-          systemState.position.downShares === 0
-        ) {
+        const activePos = systemState.activeSession().position;
+        if (activePos.upShares === 0 && activePos.downShares === 0) {
           systemState.patchPosition({ windowId: found.conditionId });
         }
       }

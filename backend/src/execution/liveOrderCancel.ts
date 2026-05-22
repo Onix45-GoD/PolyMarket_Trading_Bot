@@ -75,19 +75,25 @@ function statusForCancel(reason: LiveCancelReason): string {
 function applyFillToPosition(tracked: TrackedLiveOrder, delta: number): void {
   if (delta <= 0) return;
   const cost = delta * tracked.price;
-  const pos = systemState.position;
+  const pos = systemState.live.position;
   if (tracked.leg === "UP") {
-    systemState.patchPosition({
-      upShares: pos.upShares + delta,
-      exposureUsd: pos.exposureUsd + cost,
-      windowId: tracked.windowId,
-    });
+    systemState.patchPosition(
+      {
+        upShares: pos.upShares + delta,
+        exposureUsd: pos.exposureUsd + cost,
+        windowId: tracked.windowId,
+      },
+      "live",
+    );
   } else {
-    systemState.patchPosition({
-      downShares: pos.downShares + delta,
-      exposureUsd: pos.exposureUsd + cost,
-      windowId: tracked.windowId,
-    });
+    systemState.patchPosition(
+      {
+        downShares: pos.downShares + delta,
+        exposureUsd: pos.exposureUsd + cost,
+        windowId: tracked.windowId,
+      },
+      "live",
+    );
   }
 }
 
@@ -149,13 +155,17 @@ async function cancelTracked(
   console.log(
     `[live] cancel ${tracked.leg} ${tracked.orderId.slice(0, 10)}… reason=${reason} ok=${ok}`,
   );
-  await appendJsonl("orders", {
-    action: "CANCEL",
-    orderId: tracked.orderId,
-    pairId: tracked.pairId,
-    reason,
-    ok,
-  });
+  await appendJsonl(
+    "orders",
+    {
+      action: "CANCEL",
+      orderId: tracked.orderId,
+      pairId: tracked.pairId,
+      reason,
+      ok,
+    },
+    "live",
+  );
 }
 
 export async function cancelLivePair(

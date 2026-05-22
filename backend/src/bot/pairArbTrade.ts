@@ -17,7 +17,7 @@ export function resolveSkipReason(decision: PairArbDecision): string {
   if (!botIsActive()) {
     return "bot_stopped";
   }
-  if (systemState.pnl.daily <= -env.MAX_DAILY_LOSS_USD) {
+  if (systemState.activeSession().pnl.daily <= -env.MAX_DAILY_LOSS_USD) {
     return "max_daily_loss";
   }
   if (decision.action === "IDLE") {
@@ -81,7 +81,7 @@ export async function executePairArbDecision(
   if (result?.ok) {
     lastBuyAtMs = Date.now();
     console.log(
-      `[bot] BUY_PAIR ok ${result.pairId} x${decision.size} UP@${market.upBook?.bestBid} DOWN@${market.downBook?.bestBid} | held UP=${systemState.position.upShares} DOWN=${systemState.position.downShares}`,
+      `[bot] BUY_PAIR ok ${result.pairId} x${decision.size} UP@${market.upBook?.bestBid} DOWN@${market.downBook?.bestBid} | held UP=${systemState.activeSession().position.upShares} DOWN=${systemState.activeSession().position.downShares}`,
     );
     return;
   }

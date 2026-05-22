@@ -14,6 +14,12 @@ import { privateKeyToAccount } from "viem/accounts";
 import { env } from "../config/env.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import { checkClobHealth } from "../polymarket/clobHealth.js";
+import {
+  historyFileName,
+  historyModeFromBotMode,
+  type HistoryMode,
+} from "../storage/historyMode.js";
+import type { BotMode } from "../bot/botMode.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HISTORY_DIR = join(__dirname, "../../history");
@@ -107,20 +113,25 @@ apiRouter.post("/bot/reset-virtual-balance", (_req, res) => {
 });
 
 apiRouter.get("/orders", (_req, res) => {
-  res.json(systemState.orders);
+  res.json(systemState.getOrders());
 });
 
 apiRouter.get("/position", (_req, res) => {
-  res.json(systemState.position);
+  res.json(systemState.activeSession().position);
 });
 
 apiRouter.get("/pnl", (_req, res) => {
-  res.json(systemState.pnl);
+  res.json(systemState.activeSession().pnl);
 });
 
 apiRouter.get("/history/:kind", async (req, res) => {
   const kind = req.params.kind;
-  const file = join(HISTORY_DIR, `${kind}.jsonl`);
+  const modeQuery = req.query.mode;
+  const mode: HistoryMode =
+    modeQuery === "paper" || modeQuery === "live"
+      ? modeQuery
+      : historyModeFromBotMode(systemState.bot.mode as BotMode);
+  const file = join(HISTORY_DIR, historyFileName(kind, mode));
   try {
     const raw = await readFile(file, "utf8");
     const lines = raw

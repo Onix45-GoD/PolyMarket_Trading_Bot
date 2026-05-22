@@ -39,7 +39,7 @@ function stopForDailyLoss(): void {
   setBotEnabled(false);
   setBotStatus("stopped");
   console.log(
-    `[bot] STOP — max daily loss (daily=${systemState.pnl.daily.toFixed(2)} limit=-${env.MAX_DAILY_LOSS_USD})`,
+    `[bot] STOP — max daily loss (daily=${systemState.activeSession().pnl.daily.toFixed(2)} limit=-${env.MAX_DAILY_LOSS_USD})`,
   );
 }
 
@@ -51,7 +51,7 @@ async function tick(): Promise<void> {
     return;
   }
 
-  if (systemState.pnl.daily <= -env.MAX_DAILY_LOSS_USD) {
+  if (systemState.activeSession().pnl.daily <= -env.MAX_DAILY_LOSS_USD) {
     stopForDailyLoss();
     return;
   }
@@ -86,10 +86,14 @@ async function tick(): Promise<void> {
     error: null,
   });
 
-  await appendJsonl("pair_arb", {
-    windowId: market.market?.conditionId,
-    ...pairArb,
-  });
+  await appendJsonl(
+    "pair_arb",
+    {
+      windowId: market.market?.conditionId,
+      ...pairArb,
+    },
+    systemState.activeMode(),
+  );
 
   await executePairArbDecision(decision, "tick");
 }

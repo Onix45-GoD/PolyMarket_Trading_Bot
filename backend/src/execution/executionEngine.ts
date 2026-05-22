@@ -4,6 +4,7 @@ import { getClobClient } from "../polymarket/clobClient.js";
 import type { OrderRecord } from "../types/index.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
+import type { HistoryMode } from "../storage/historyMode.js";
 import { registerLivePairOrders } from "./liveOrderTracker.js";
 
 export interface PairExecutionResult {
@@ -64,6 +65,7 @@ export async function executePairBuy(
   );
 
   const cost = size * (bidUp + bidDown);
+  const historyMode: HistoryMode = simulated ? "paper" : "live";
 
   if (simulated) {
     if (systemState.virtualAccount.balanceUsd < cost) {
@@ -71,30 +73,46 @@ export async function executePairBuy(
       downOrder.status = "SIMULATED_REJECTED_BALANCE";
       systemState.addOrder(upOrder);
       systemState.addOrder(downOrder);
-      await appendJsonl("orders", { pairId, upOrder, downOrder, cost });
+      await appendJsonl(
+        "orders",
+        { pairId, upOrder, downOrder, cost },
+        historyMode,
+      );
       return { pairId, orders: [upOrder, downOrder], ok: false };
     }
 
+    const paperPos = systemState.paper.position;
     systemState.patchVirtualAccount({
       balanceUsd: systemState.virtualAccount.balanceUsd - cost,
     });
-    systemState.patchPosition({
-      upShares: systemState.position.upShares + size,
-      downShares: systemState.position.downShares + size,
-      exposureUsd: systemState.position.exposureUsd + cost,
-      windowId: market.conditionId,
-    });
+    systemState.patchPosition(
+      {
+        upShares: paperPos.upShares + size,
+        downShares: paperPos.downShares + size,
+        exposureUsd: paperPos.exposureUsd + cost,
+        windowId: market.conditionId,
+      },
+      "paper",
+    );
     systemState.addOrder(upOrder);
     systemState.addOrder(downOrder);
-    await appendJsonl("orders", { pairId, action: "BUY_PAIR", size, cost });
-    await appendJsonl("fills", {
-      pairId,
-      action: "BUY_PAIR",
-      size,
-      bidUp,
-      bidDown,
-      simulated: true,
-    });
+    await appendJsonl(
+      "orders",
+      { pairId, action: "BUY_PAIR", size, cost },
+      historyMode,
+    );
+    await appendJsonl(
+      "fills",
+      {
+        pairId,
+        action: "BUY_PAIR",
+        size,
+        bidUp,
+        bidDown,
+        simulated: true,
+      },
+      historyMode,
+    );
     return { pairId, orders: [upOrder, downOrder], ok: true };
   }
 
@@ -142,14 +160,18 @@ export async function executePairBuy(
       btcDirection: btcDir,
     });
 
-    await appendJsonl("orders", {
-      pairId,
-      action: "BUY_PAIR",
-      size,
-      bidUp,
-      bidDown,
-      btcDirection: btcDir,
-    });
+    await appendJsonl(
+      "orders",
+      {
+        pairId,
+        action: "BUY_PAIR",
+        size,
+        bidUp,
+        bidDown,
+        btcDirection: btcDir,
+      },
+      historyMode,
+    );
     return { pairId, orders: [upOrder, downOrder], ok: true };
   } catch (err) {
     upOrder.status = "FAILED";
@@ -159,6 +181,7 @@ export async function executePairBuy(
     await appendJsonl("errors", {
       message: err instanceof Error ? err.message : String(err),
       context: "executePairBuy",
+      mode: historyMode,
     });
     return { pairId, orders: [upOrder, downOrder], ok: false };
   }

@@ -20,8 +20,12 @@ import {
 export type { WindowWinner };
 export { resetSettlementState };
 
+function paperPosition() {
+  return systemState.paper.position;
+}
+
 function hasOpenPaperPosition(): boolean {
-  const { upShares, downShares } = systemState.position;
+  const { upShares, downShares } = paperPosition();
   return upShares > 0 || downShares > 0;
 }
 
@@ -65,12 +69,7 @@ async function doSettlePaperWindow(
 ): Promise<LastClosedWindowState | null> {
   const windowKey = closedMarket.conditionId;
 
-  const snapshot = {
-    upShares: systemState.position.upShares,
-    downShares: systemState.position.downShares,
-    exposureUsd: systemState.position.exposureUsd,
-    windowId: systemState.position.windowId,
-  };
+  const snapshot = { ...paperPosition() };
 
   if (snapshot.upShares <= 0 && snapshot.downShares <= 0) {
     return null;
@@ -83,12 +82,15 @@ async function doSettlePaperWindow(
   }
 
   // Claim position immediately so parallel settlement calls see zero shares.
-  systemState.patchPosition({
-    upShares: 0,
-    downShares: 0,
-    exposureUsd: 0,
-    windowId: null,
-  });
+  systemState.patchPosition(
+    {
+      upShares: 0,
+      downShares: 0,
+      exposureUsd: 0,
+      windowId: null,
+    },
+    "paper",
+  );
 
   const resolved = await resolveWindowWinnerForMarket(
     closedMarket,
@@ -96,7 +98,7 @@ async function doSettlePaperWindow(
     btcEnd,
   );
   if (!resolved) {
-    systemState.patchPosition(snapshot);
+    systemState.patchPosition(snapshot, "paper");
     console.warn(
       `[settlement] ${closedMarket.slug} — cannot resolve winner (Gamma/CLOB/BTC unavailable)`,
     );
@@ -116,11 +118,15 @@ async function doSettlePaperWindow(
   systemState.patchVirtualAccount({
     balanceUsd: systemState.virtualAccount.balanceUsd + payoutUsd,
   });
-  systemState.patchPnl({
-    realized: systemState.pnl.realized + profitUsd,
-    daily: systemState.pnl.daily + profitUsd,
-    unrealized: 0,
-  });
+  const paperPnl = systemState.paper.pnl;
+  systemState.patchPnl(
+    {
+      realized: paperPnl.realized + profitUsd,
+      daily: paperPnl.daily + profitUsd,
+      unrealized: 0,
+    },
+    "paper",
+  );
 
   markWindowSettled(windowKey);
 
@@ -141,8 +147,8 @@ async function doSettlePaperWindow(
     downPrice,
   };
 
-  systemState.lastClosedWindow = lastClosed;
-  systemState.windowsCompleted += 1;
+  systemState.setLastClosedWindow(lastClosed, "paper");
+  systemState.incrementWindowsCompleted("paper");
   resetPairArbTradeState();
 
   const priceHint =
@@ -155,7 +161,7 @@ async function doSettlePaperWindow(
   );
 
   try {
-    await appendJsonl("settlements", lastClosed);
+    await appendJsonl("settlements", lastClosed, "paper");
   } catch (err) {
     console.warn(
       "[settlement] failed to write settlements.jsonl:",
@@ -181,7 +187,7 @@ export async function maybeSettleExpiredPaperWindow(): Promise<void> {
   const market = systemState.market.market;
   if (!market || !isVirtualMode(systemState.bot.mode as BotMode)) return;
   if (!hasOpenPaperPosition()) return;
-  if (systemState.position.windowId !== market.conditionId) return;
+  if (paperPosition().windowId !== market.conditionId) return;
 
   const endMs = new Date(market.endDate).getTime();
   if (Date.now() < endMs) return;
