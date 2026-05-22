@@ -78,6 +78,14 @@ const envSchema = z.object({
   MANUAL_MARKET_QUESTION: z.string().optional(),
   MANUAL_MARKET_END_DATE: z.string().optional(),
   MANUAL_WINDOW_MINUTES: z.coerce.number().default(5),
+  POLYGON_RPC_URL: z.string().default("https://polygon-rpc.com"),
+  RELAYER_URL: z.string().default("https://relayer-v2.polymarket.com/"),
+  /** Wait after window end before first live redeem attempt */
+  LIVE_REDEEM_DELAY_MS: z.coerce.number().default(15_000),
+  /** Poll interval while waiting for Gamma resolution + redeem */
+  LIVE_REDEEM_POLL_MS: z.coerce.number().default(10_000),
+  /** Max time to keep retrying redeem for a closed window */
+  LIVE_REDEEM_MAX_WAIT_MS: z.coerce.number().default(600_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

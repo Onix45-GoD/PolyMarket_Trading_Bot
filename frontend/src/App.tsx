@@ -547,7 +547,6 @@ export default function App() {
                   {lastClosed != null ? ` · ${lastClosed.winner} won` : ""}
                 </span>
                 <span>Orders {histSummary.orders}</span>
-                <span>Spent {fmtUsd(histSummary.spent)}</span>
               </div>
             </div>
             <div className="table-wrap">

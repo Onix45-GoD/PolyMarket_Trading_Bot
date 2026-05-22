@@ -183,3 +183,17 @@ export async function resolveWindowWinnerForMarket(
 
   return null;
 }
+
+/** True when Gamma shows the market closed/resolved with a clear winner. */
+export async function isMarketReadyToRedeem(slug: string): Promise<boolean> {
+  try {
+    const gamma = await fetchGammaMarketBySlug(slug);
+    if (!gamma) return false;
+    const closed =
+      gamma.closed === true || gamma.umaResolutionStatus === "resolved";
+    if (!closed) return false;
+    return resolveWinnerFromGamma(gamma) !== null;
+  } catch {
+    return false;
+  }
+}

@@ -140,6 +140,9 @@ export interface LastClosedWindowState {
   resolutionSource?: "gamma" | "clob" | "btc";
   upPrice?: number | null;
   downPrice?: number | null;
+  /** Live: on-chain or relayer redeem tx */
+  redeemTxHash?: string | null;
+  redeemMethod?: string | null;
 }
 
 export interface SystemSnapshot {

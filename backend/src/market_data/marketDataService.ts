@@ -9,7 +9,9 @@ import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 import { logPairArbSnapshot } from "./pairArbLog.js";
 import {
+  maybeRedeemExpiredLiveWindow,
   maybeSettleExpiredPaperWindow,
+  settleLiveWindowIfNeeded,
   settlePaperWindowIfNeeded,
 } from "../settlement/windowSettlement.js";
 import {
@@ -32,6 +34,7 @@ async function refreshBooks(): Promise<void> {
   if (!market) return;
 
   await maybeSettleExpiredPaperWindow();
+  await maybeRedeemExpiredLiveWindow();
   await enforceLiveOrderCancelRules();
 
   try {
@@ -92,6 +95,7 @@ async function refreshMarket(): Promise<void> {
         await cancelAllOpenLiveOrders("window_switch");
       }
       await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
+      await settleLiveWindowIfNeeded(prev, btc.startPrice, btc.price);
     }
     systemState.patchMarket({ market: manual });
     systemState.patchConnectivity({
@@ -122,6 +126,7 @@ async function refreshMarket(): Promise<void> {
           await cancelAllOpenLiveOrders("window_switch");
         }
         await settlePaperWindowIfNeeded(prev, btc.startPrice, btc.price);
+        await settleLiveWindowIfNeeded(prev, btc.startPrice, btc.price);
       }
       systemState.patchMarket({ market: found });
       systemState.patchConnectivity({ gamma: "ok", gammaError: null });

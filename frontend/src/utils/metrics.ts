@@ -1,6 +1,5 @@
 import type { SystemSnapshot } from "../types";
 import {
-  displayOrderCost,
   groupOrdersForDisplay,
   isDisplayOrderFilled,
 } from "./groupPairOrders";
@@ -85,11 +84,7 @@ export function pairPositionMetrics(
 export function history24hSummary(orders: SystemSnapshot["orders"]) {
   const rows = groupOrdersForDisplay(orders);
   const filled = rows.filter(isDisplayOrderFilled);
-  const spent = filled.reduce((s, o) => s + displayOrderCost(o), 0);
   return {
     orders: filled.length,
-    spent,
-    payout: 0,
-    net: -spent,
   };
 }
