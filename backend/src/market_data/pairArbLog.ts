@@ -48,7 +48,7 @@ export function logPairArbSnapshot(): void {
     return;
   }
 
-  console.log(
-    `[market] ${at} ${slug} ${prices} action=${decision.action} size=${decision.size} → skip (${skip}) [arb: ${decision.reason}]`,
-  );
+  // console.log(
+  //   `[market] ${at} ${slug} ${prices} action=${decision.action} size=${decision.size} → skip (${skip}) [arb: ${decision.reason}]`,
+  // );
 }
