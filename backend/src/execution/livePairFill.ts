@@ -1,6 +1,12 @@
 import { OrderType, Side } from "@polymarket/clob-client-v2";
 import { env } from "../config/env.js";
 import { getClobClient } from "../polymarket/clobClient.js";
+import {
+  logClobOrderError,
+  logClobOrderRequest,
+  logClobOrderResponse,
+} from "../polymarket/clobOrderConsole.js";
+import { parseOrderPostResponse } from "../polymarket/clobOrderResponse.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
 import {
@@ -139,7 +145,16 @@ export async function abortUnbalancedLivePair(
           continue;
         }
         try {
-          await clob.createAndPostMarketOrder(
+          logClobOrderRequest({
+            action: "createAndPostMarketOrder",
+            leg: leg.leg,
+            tokenID: leg.tokenId,
+            amount: leg.filledSize,
+            side: "SELL",
+            orderType: "FAK",
+          });
+          const t0 = Date.now();
+          const raw = await clob.createAndPostMarketOrder(
             {
               tokenID: leg.tokenId,
               amount: leg.filledSize,
@@ -148,6 +163,11 @@ export async function abortUnbalancedLivePair(
             { tickSize: "0.01", negRisk: false },
             OrderType.FAK,
           );
+          logClobOrderResponse({
+            leg: leg.leg,
+            parsed: parseOrderPostResponse(raw),
+            elapsedMs: Date.now() - t0,
+          });
           console.log(
             `[live] unwind ${leg.leg} x${leg.filledSize} (pair ${pairId})`,
           );
@@ -155,6 +175,12 @@ export async function abortUnbalancedLivePair(
             status: "LIVE_UNWIND_SELL",
           });
         } catch (err) {
+          logClobOrderError({
+            leg: leg.leg,
+            action: "createAndPostMarketOrder",
+            elapsedMs: 0,
+            err,
+          });
           console.warn(
             `[live] unwind ${leg.leg} failed:`,
             err instanceof Error ? err.message : err,

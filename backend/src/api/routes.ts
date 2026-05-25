@@ -16,6 +16,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { env } from "../config/env.js";
 import { refreshLiveCollateralBalance } from "../polymarket/clobBalance.js";
 import { getClobClient } from "../polymarket/clobClient.js";
+import {
+  formatClobRespBrief,
+  logClobCancelResult,
+  logClobOrderRequest,
+} from "../polymarket/clobOrderConsole.js";
 import { checkClobHealth } from "../polymarket/clobHealth.js";
 import {
   historyFileName,
@@ -204,7 +209,15 @@ apiRouter.post("/orders/cancel-all", async (_req, res) => {
     }
 
     console.log("[ui] cancel-all — calling CLOB cancelAll()…");
+    const t0 = Date.now();
+    logClobOrderRequest({ action: "cancelAll" });
     const clobResp = await clob.cancelAll();
+    logClobCancelResult({
+      action: "cancelAll",
+      ok: true,
+      elapsedMs: Date.now() - t0,
+      detail: formatClobRespBrief(clobResp),
+    });
     clearLiveOrders();
 
     const openOrders = systemState

@@ -1,6 +1,10 @@
 import { env } from "../config/env.js";
 import { getBtcDirection } from "../btc_price/btcDirection.js";
 import { getClobClient } from "../polymarket/clobClient.js";
+import {
+  logClobCancelResult,
+  logClobOrderRequest,
+} from "../polymarket/clobOrderConsole.js";
 import { isLocalPlaceholderOrderId } from "../polymarket/clobOrderResponse.js";
 import { systemState } from "../state/systemState.js";
 import { appendJsonl } from "../storage/jsonlWriter.js";
@@ -69,14 +73,38 @@ async function cancelOnClob(orderId: string): Promise<boolean> {
   }
   const clob = await getClobClient();
   if (!clob) return false;
+  const t0 = Date.now();
+  logClobOrderRequest({ action: "cancelOrder", orderID: orderId });
   try {
     await clob.cancelOrder({ orderID: orderId });
+    logClobCancelResult({
+      action: "cancelOrder",
+      orderID: orderId,
+      ok: true,
+      elapsedMs: Date.now() - t0,
+    });
     return true;
-  } catch {
+  } catch (e1) {
+    logClobOrderRequest({ action: "cancelOrders", orderID: orderId });
     try {
       await clob.cancelOrders([orderId]);
+      logClobCancelResult({
+        action: "cancelOrders",
+        orderID: orderId,
+        ok: true,
+        elapsedMs: Date.now() - t0,
+        detail: "fallback",
+      });
       return true;
-    } catch {
+    } catch (e2) {
+      logClobCancelResult({
+        action: "cancelOrder",
+        orderID: orderId,
+        ok: false,
+        elapsedMs: Date.now() - t0,
+        detail:
+          e2 instanceof Error ? e2.message : e1 instanceof Error ? e1.message : "failed",
+      });
       return false;
     }
   }

@@ -52,6 +52,10 @@ export async function getClobClient(): Promise<ClobClient | null> {
       : {}),
   });
 
+  console.log(
+    `[clob-req] CLOB client ready — live orders log with prefix [clob-req] → ${env.CLOB_HOST}`,
+  );
+
   return client;
 }
 

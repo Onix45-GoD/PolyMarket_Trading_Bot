@@ -1,11 +1,20 @@
+import type { ClobClient } from "@polymarket/clob-client-v2";
 import { OrderType, Side } from "@polymarket/clob-client-v2";
 import { env } from "../config/env.js";
 import { getBtcDirection } from "../btc_price/btcDirection.js";
 import { refreshLiveCollateralBalance } from "../polymarket/clobBalance.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import {
+  logClobOrderError,
+  logClobOrderRequest,
+  logClobOrderResponse,
+  logClobPairBuyStart,
+  type ClobLeg,
+} from "../polymarket/clobOrderConsole.js";
+import {
   isLocalPlaceholderOrderId,
   parseOrderPostResponse,
+  type ParsedOrderPost,
 } from "../polymarket/clobOrderResponse.js";
 import type { OrderRecord } from "../types/index.js";
 import { systemState } from "../state/systemState.js";
@@ -21,6 +30,44 @@ export interface PairExecutionResult {
   pairId: string;
   orders: OrderRecord[];
   ok: boolean;
+}
+
+async function postBuyLegToClob(
+  clob: ClobClient,
+  leg: ClobLeg,
+  tokenID: string,
+  price: number,
+  size: number,
+  orderType: OrderType,
+): Promise<ParsedOrderPost> {
+  logClobOrderRequest({
+    action: "createAndPostOrder",
+    leg,
+    tokenID,
+    price,
+    size,
+    side: "BUY",
+    orderType: env.LIVE_ORDER_TYPE,
+  });
+  const t0 = Date.now();
+  try {
+    const raw = await clob.createAndPostOrder(
+      { tokenID, price, size, side: Side.BUY },
+      { tickSize: "0.01", negRisk: false },
+      orderType as OrderType.GTC,
+    );
+    const parsed = parseOrderPostResponse(raw);
+    logClobOrderResponse({ leg, parsed, elapsedMs: Date.now() - t0 });
+    return parsed;
+  } catch (err) {
+    logClobOrderError({
+      leg,
+      action: "createAndPostOrder",
+      elapsedMs: Date.now() - t0,
+      err,
+    });
+    throw err;
+  }
 }
 
 function makeOrder(
@@ -162,39 +209,21 @@ export async function executePairBuy(
   const orderType =
     env.LIVE_ORDER_TYPE === "GTC" ? OrderType.GTC : OrderType.FOK;
 
-  try {
-    const [upResp, downResp] = await Promise.all([
-      clob.createAndPostOrder(
-        {
-          tokenID: market.upTokenId,
-          price: bidUp,
-          size,
-          side: Side.BUY,
-        },
-        { tickSize: "0.01", negRisk: false },
-        // SDK typings only allow GTC/GTD; FOK is accepted at runtime.
-        orderType as OrderType.GTC,
-      ),
-      clob.createAndPostOrder(
-        {
-          tokenID: market.downTokenId,
-          price: bidDown,
-          size,
-          side: Side.BUY,
-        },
-        { tickSize: "0.01", negRisk: false },
-        orderType as OrderType.GTC,
-      ),
-    ]);
+  logClobPairBuyStart({
+    pairId,
+    slug: market.slug,
+    size,
+    bidUp,
+    bidDown,
+    costUsd: cost,
+    orderType: env.LIVE_ORDER_TYPE,
+  });
 
-    const upParsed = parseOrderPostResponse(upResp);
-    const downParsed = parseOrderPostResponse(downResp);
-    console.log(
-      `[live] CLOB POST UP → id=${upParsed.orderId ?? "MISSING"} success=${upParsed.success} status=${upParsed.status ?? "—"} err=${upParsed.errorMsg ?? "—"}`,
-    );
-    console.log(
-      `[live] CLOB POST DOWN → id=${downParsed.orderId ?? "MISSING"} success=${downParsed.success} status=${downParsed.status ?? "—"} err=${downParsed.errorMsg ?? "—"}`,
-    );
+  try {
+    const [upParsed, downParsed] = await Promise.all([
+      postBuyLegToClob(clob, "UP", market.upTokenId, bidUp, size, orderType),
+      postBuyLegToClob(clob, "DOWN", market.downTokenId, bidDown, size, orderType),
+    ]);
 
     if (!upParsed.success || !downParsed.success || !upParsed.orderId || !downParsed.orderId) {
       upOrder.status = "LIVE_REJECTED_CLOB";
@@ -264,6 +293,9 @@ export async function executePairBuy(
     systemState.updateOrder(downOrder.id, { status: downOrder.status });
     return { pairId, orders: [upOrder, downOrder], ok: false };
   } catch (err) {
+    console.error(
+      `[clob-req] BUY_PAIR aborted — pair=${pairId} (${err instanceof Error ? err.message : err})`,
+    );
     upOrder.status = "FAILED";
     downOrder.status = "FAILED";
     systemState.addOrder(upOrder);

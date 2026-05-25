@@ -79,7 +79,7 @@ export async function executePairArbDecision(
   }
 
   console.log(
-    `[bot] ${source} ${at} ${slug} → BUY_PAIR x${decision.size} (mode=${mode}, ${simulated ? "PAPER/simulated" : "LIVE/CLOB"}, maxPerTrade=${env.MAX_PAIR_ORDER_SIZE})`,
+    `[bot] ${source} ${at} ${slug} → BUY_PAIR x${decision.size} (mode=${mode}, ${simulated ? "PAPER/simulated" : "LIVE/CLOB — watch [clob-req]"}, maxPerTrade=${env.MAX_PAIR_ORDER_SIZE})`,
   );
 
   let result: Awaited<ReturnType<typeof executePairBuy>>;
