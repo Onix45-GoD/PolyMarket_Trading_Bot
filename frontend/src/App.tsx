@@ -68,9 +68,14 @@ export default function App() {
   const win = windowProgress(market ?? null);
   const pc = pairCost(snap);
   const virtualBal = snap?.virtualAccount;
+  const liveUsdc = snap?.liveCollateral;
+  const liveCash = liveUsdc?.ok ? (liveUsdc.balanceUsd ?? 0) : null;
+  const positionCost = snap?.position.exposureUsd ?? 0;
   const totalValue = isVirtual
-    ? (virtualBal?.balanceUsd ?? 0) + (snap?.position.exposureUsd ?? 0)
-    : (snap?.position.exposureUsd ?? 0);
+    ? (virtualBal?.balanceUsd ?? 0) + positionCost
+    : liveCash != null
+      ? liveCash + positionCost
+      : positionCost;
 
   const connError =
     conn?.gammaError ||
@@ -261,15 +266,28 @@ export default function App() {
             <div className="wallet-cards">
               <article>
                 <span className="lbl">
-                  {isVirtual ? "PAPER BALANCE" : "POLYMARKET USDC"}
+                  {isVirtual ? "PAPER BALANCE" : "POLYMARKET USDC (CLOB)"}
                 </span>
                 <span className="wallet-amt">
-                  {fmtUsd(isVirtual ? virtualBal?.balanceUsd : totalValue)}
+                  {isVirtual
+                    ? fmtUsd(virtualBal?.balanceUsd)
+                    : liveCash != null
+                      ? fmtUsd(liveCash)
+                      : "—"}
                 </span>
+                {!isVirtual && liveUsdc && !liveUsdc.ok && liveUsdc.error && (
+                  <span className="lbl" style={{ color: "var(--warn, #c90)" }}>
+                    {liveUsdc.error}
+                  </span>
+                )}
               </article>
               <article>
-                <span className="lbl">METAMASK WALLET</span>
-                <span className="wallet-amt">{fmtUsd(isVirtual ? 0 : 0)}</span>
+                <span className="lbl">
+                  {isVirtual ? "METAMASK WALLET" : "OPEN POSITION (COST)"}
+                </span>
+                <span className="wallet-amt">
+                  {fmtUsd(isVirtual ? 0 : positionCost)}
+                </span>
               </article>
             </div>
           </section>

@@ -5,11 +5,12 @@ import {
   type HistoryMode,
 } from "../storage/historyMode.js";
 import { resetSettlementState } from "../settlement/settlementGuard.js";
-import type { BotMode } from "../bot/botMode.js";
 import type {
+  BotMode,
   BotState,
   ConnectivityState,
   LastClosedWindowState,
+  LiveCollateralState,
   MarketState,
   OrderRecord,
   PnlState,
@@ -17,6 +18,7 @@ import type {
   SystemSnapshot,
   VirtualAccountState,
 } from "../types/index.js";
+import { isVirtualMode } from "../bot/botMode.js";
 
 const emptyConnectivity: ConnectivityState = {
   gamma: "unknown",
@@ -67,6 +69,14 @@ function emptyPnl(): PnlState {
   };
 }
 
+const emptyLiveCollateral: LiveCollateralState = {
+  balanceUsd: null,
+  ok: false,
+  error: null,
+  walletAddress: null,
+  updatedAt: null,
+};
+
 /** Per-mode trading history (orders, position, P/L, settlements). */
 interface ModeTradingState {
   orders: OrderRecord[];
@@ -101,6 +111,8 @@ class SystemStateStore {
     startingBalanceUsd: env.VIRTUAL_STARTING_BALANCE_USD,
   };
 
+  liveCollateral: LiveCollateralState = { ...emptyLiveCollateral };
+
   connectivity: ConnectivityState = { ...emptyConnectivity };
 
   private session(mode: HistoryMode): ModeTradingState {
@@ -115,6 +127,17 @@ class SystemStateStore {
     return this.session(this.activeMode());
   }
 
+  /** USDC for pair-arb sizing: paper = virtual; live = CLOB collateral when available. */
+  tradingBalanceUsd(): number {
+    if (isVirtualMode(this.bot.mode as BotMode)) {
+      return this.virtualAccount.balanceUsd;
+    }
+    if (this.liveCollateral.ok && this.liveCollateral.balanceUsd != null) {
+      return this.liveCollateral.balanceUsd;
+    }
+    return this.virtualAccount.balanceUsd;
+  }
+
   getSnapshot(): SystemSnapshot {
     const active = this.activeSession();
     return {
@@ -124,6 +147,7 @@ class SystemStateStore {
       position: structuredClone(active.position),
       pnl: structuredClone(active.pnl),
       virtualAccount: structuredClone(this.virtualAccount),
+      liveCollateral: structuredClone(this.liveCollateral),
       connectivity: structuredClone(this.connectivity),
       lastClosedWindow: structuredClone(active.lastClosedWindow),
       windowsCompleted: active.windowsCompleted,
@@ -200,6 +224,10 @@ class SystemStateStore {
 
   patchVirtualAccount(partial: Partial<VirtualAccountState>): void {
     this.virtualAccount = { ...this.virtualAccount, ...partial };
+  }
+
+  patchLiveCollateral(partial: Partial<LiveCollateralState>): void {
+    this.liveCollateral = { ...this.liveCollateral, ...partial };
   }
 
   setLastClosedWindow(

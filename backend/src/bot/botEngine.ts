@@ -124,13 +124,7 @@ async function tick(): Promise<void> {
 
   const tickAt = new Date().toISOString();
 
-  const decision = evaluatePairArb(
-
-    market,
-
-    systemState.virtualAccount.balanceUsd,
-
-  );
+  const decision = evaluatePairArb(market, systemState.tradingBalanceUsd());
 
 
 

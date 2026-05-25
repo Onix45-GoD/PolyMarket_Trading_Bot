@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { refreshLiveCollateralBalance } from "../polymarket/clobBalance.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import { findActiveBtcUpDownMarket } from "../market_discovery/btcMarketFinder.js";
 import { getManualMarket } from "../market_discovery/manualMarket.js";
@@ -65,6 +66,10 @@ async function refreshBooks(): Promise<void> {
 
     systemState.patchMarket({ upBook, downBook });
     systemState.patchConnectivity({ clob: "ok", clobError: null });
+
+    if (clob) {
+      await refreshLiveCollateralBalance().catch(() => {});
+    }
 
     logPairArbSnapshot();
 
@@ -172,6 +177,9 @@ export async function startMarketDataService(): Promise<void> {
   );
   await refreshMarket();
   await refreshBooks().catch(() => {});
+  if (env.PRIVATE_KEY) {
+    await refreshLiveCollateralBalance().catch(() => {});
+  }
 
   timer = setInterval(async () => {
     await refreshMarket();

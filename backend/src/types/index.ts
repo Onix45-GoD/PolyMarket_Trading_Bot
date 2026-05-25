@@ -125,6 +125,16 @@ export interface VirtualAccountState {
   startingBalanceUsd: number;
 }
 
+/** Live Polymarket CLOB collateral (USDC) for proxy/funder wallet */
+export interface LiveCollateralState {
+  balanceUsd: number | null;
+  ok: boolean;
+  error: string | null;
+  /** DEPOSIT_WALLET_ADDRESS or signer address used for CLOB */
+  walletAddress: string | null;
+  updatedAt: string | null;
+}
+
 export interface LastClosedWindowState {
   windowId: string;
   slug: string;
@@ -152,6 +162,7 @@ export interface SystemSnapshot {
   position: PositionState;
   pnl: PnlState;
   virtualAccount: VirtualAccountState;
+  liveCollateral: LiveCollateralState;
   connectivity: ConnectivityState;
   lastClosedWindow: LastClosedWindowState | null;
   windowsCompleted: number;

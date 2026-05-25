@@ -21,10 +21,7 @@ export function logPairArbSnapshot(): void {
     return;
   }
 
-  const decision = evaluatePairArb(
-    market,
-    systemState.virtualAccount.balanceUsd,
-  );
+  const decision = evaluatePairArb(market, systemState.tradingBalanceUsd());
 
   const pairArb: PairArbState = {
     action: decision.action,

@@ -1,7 +1,7 @@
 import { OrderType, Side } from "@polymarket/clob-client-v2";
 import { env } from "../config/env.js";
 import { getBtcDirection } from "../btc_price/btcDirection.js";
-import { getLiveCollateralBalanceUsd } from "../polymarket/clobBalance.js";
+import { refreshLiveCollateralBalance } from "../polymarket/clobBalance.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import {
   isLocalPlaceholderOrderId,
@@ -135,7 +135,7 @@ export async function executePairBuy(
     return { pairId, orders: [upOrder, downOrder], ok: false };
   }
 
-  const bal = await getLiveCollateralBalanceUsd();
+  const bal = await refreshLiveCollateralBalance();
   if (bal.ok) {
     console.log(
       `[live] Polymarket USDC balance ≈ $${bal.balanceUsd.toFixed(2)} (proxy/funder wallet, not MetaMask ETH)`,

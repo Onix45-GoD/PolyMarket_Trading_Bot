@@ -14,6 +14,7 @@ import {
 import { getOpenLiveOrders } from "../execution/liveOrderTracker.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { env } from "../config/env.js";
+import { refreshLiveCollateralBalance } from "../polymarket/clobBalance.js";
 import { getClobClient } from "../polymarket/clobClient.js";
 import { checkClobHealth } from "../polymarket/clobHealth.js";
 import {
@@ -115,6 +116,9 @@ apiRouter.post("/bot/mode", async (req, res) => {
     }
 
     setBotMode(mode);
+    if (!isVirtualMode(mode) && env.PRIVATE_KEY) {
+      await refreshLiveCollateralBalance().catch(() => {});
+    }
     const bot = systemState.bot;
     console.log(
       `[ui] bot MODE ok → ${bot.mode} (${isVirtualMode(mode) ? "PAPER — next trades simulated" : "LIVE — next trades on CLOB"})`,
@@ -229,6 +233,17 @@ apiRouter.post("/orders/cancel-all", async (_req, res) => {
     console.error("[ui] cancel-all FAILED:", msg);
     res.status(500).json({ error: msg });
   }
+});
+
+/** Live Polymarket USDC (CLOB collateral) for proxy/funder wallet */
+apiRouter.get("/wallet/live-usdc", async (_req, res) => {
+  const read = await refreshLiveCollateralBalance();
+  res.json({
+    ...systemState.liveCollateral,
+    balanceUsd: read.ok ? read.balanceUsd : null,
+    ok: read.ok,
+    error: read.error ?? null,
+  });
 });
 
 apiRouter.get("/config", (_req, res) => {

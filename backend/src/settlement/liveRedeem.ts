@@ -2,7 +2,7 @@ import { zeroHash } from "viem";
 import type { DepositWalletCall } from "@polymarket/builder-relayer-client";
 import { env } from "../config/env.js";
 import { fetchWithTimeout } from "../net/initNetwork.js";
-import { getLiveCollateralBalanceUsd } from "../polymarket/clobBalance.js";
+import { refreshLiveCollateralBalance } from "../polymarket/clobBalance.js";
 import { getRelayClient, hasRelayRedeemSupport } from "../polymarket/relayClient.js";
 import {
   createTradingWalletClient,
@@ -71,13 +71,13 @@ async function redeemViaRelayer(
   }
 
   const txn = buildCtfRedeemTransaction(conditionId);
-  const before = await getLiveCollateralBalanceUsd();
+  const before = await refreshLiveCollateralBalance();
   console.log(
     `[redeem] relayer execute → CTF redeem condition=${conditionId.slice(0, 14)}…`,
   );
   const resp = await relay.execute([txn], "redeem");
   const confirmed = await resp.wait();
-  const after = await getLiveCollateralBalanceUsd();
+  const after = await refreshLiveCollateralBalance();
 
   if (!confirmed || confirmed.state?.includes("FAILED")) {
     return {
@@ -120,7 +120,7 @@ async function redeemViaDepositWallet(
     data: calldata,
   };
   const deadline = String(Math.floor(Date.now() / 1000) + 600);
-  const before = await getLiveCollateralBalanceUsd();
+  const before = await refreshLiveCollateralBalance();
 
   console.log(
     `[redeem] deposit wallet batch → ${depositWallet.slice(0, 10)}… condition=${conditionId.slice(0, 14)}…`,
@@ -131,7 +131,7 @@ async function redeemViaDepositWallet(
     deadline,
   );
   const confirmed = await resp.wait();
-  const after = await getLiveCollateralBalanceUsd();
+  const after = await refreshLiveCollateralBalance();
 
   if (!confirmed || confirmed.state?.includes("FAILED")) {
     return {
@@ -170,7 +170,7 @@ async function redeemViaEoa(conditionId: string): Promise<RedeemResult> {
   const cfg = await import("@polymarket/clob-client-v2").then((m) =>
     m.getContractConfig(env.CHAIN_ID),
   );
-  const before = await getLiveCollateralBalanceUsd();
+  const before = await refreshLiveCollateralBalance();
   console.log(`[redeem] EOA on-chain redeem condition=${conditionId.slice(0, 14)}…`);
 
   const hash = await wallet.writeContract({
@@ -187,7 +187,7 @@ async function redeemViaEoa(conditionId: string): Promise<RedeemResult> {
     account,
   });
 
-  const after = await getLiveCollateralBalanceUsd();
+  const after = await refreshLiveCollateralBalance();
   return {
     ok: true,
     txHash: hash,

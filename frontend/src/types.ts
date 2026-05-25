@@ -80,6 +80,13 @@ export interface SystemSnapshot {
   };
   pnl: { realized: number; unrealized: number; daily: number };
   virtualAccount: { balanceUsd: number; startingBalanceUsd: number };
+  liveCollateral: {
+    balanceUsd: number | null;
+    ok: boolean;
+    error: string | null;
+    walletAddress: string | null;
+    updatedAt: string | null;
+  };
   lastClosedWindow: {
     windowId: string;
     slug: string;
