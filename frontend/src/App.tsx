@@ -12,18 +12,15 @@ import {
   setBotMode,
 } from "./api/client";
 import type { BotStatus, SystemSnapshot, TradingMoneyMode } from "./types";
+import { HeldTokenStateCard } from "./components/HeldTokenStateCard";
 import { TokenBookPrices } from "./components/TokenBookPrices";
 import { botStatusLabel, fmt, fmtQty, fmtUsd, shortAddr } from "./utils/format";
 import {
   formatPairArbReason,
   pairArbActionLabel,
 } from "./utils/pairArbReason";
-import {
-  history24hSummary,
-  pairCost,
-  pairPositionMetrics,
-  windowProgress,
-} from "./utils/metrics";
+import { computeHeldTokenStates } from "./utils/heldTokenState";
+import { history24hSummary, pairPositionMetrics, windowProgress } from "./utils/metrics";
 import { groupOrdersForDisplay } from "./utils/groupPairOrders";
 
 export default function App() {
@@ -66,7 +63,7 @@ export default function App() {
   const isRunning = botStatus === "running" && Boolean(bot?.enabled);
   const market = m?.market;
   const win = windowProgress(market ?? null);
-  const pc = pairCost(snap);
+  const heldTokens = useMemo(() => computeHeldTokenStates(snap), [snap]);
   const virtualBal = snap?.virtualAccount;
   const liveUsdc = snap?.liveCollateral;
   const liveCash = liveUsdc?.ok ? (liveUsdc.balanceUsd ?? 0) : null;
@@ -85,12 +82,7 @@ export default function App() {
   const upShares = snap?.position.upShares ?? 0;
   const downShares = snap?.position.downShares ?? 0;
   const pairPos = useMemo(() => pairPositionMetrics(snap), [snap]);
-  const unmatched = pairPos?.unmatched ?? 0;
   const matched = pairPos?.matched ?? 0;
-  const matchedProfit =
-    pairPos?.avgBuySum != null && matched > 0
-      ? matched * (1 - pairPos.avgBuySum)
-      : null;
 
   const histSummary = useMemo(
     () => history24hSummary(snap?.orders ?? []),
@@ -433,38 +425,17 @@ export default function App() {
             />
           </section>
 
-          <section className="metric-row four">
-            <article className="metric-card">
-              <span className="lbl">PAIR COST</span>
-              <span className="val">{fmt(pc, 3)}</span>
-              <span className="val-sub">
-                Ask sum{" "}
-                {fmt(
-                  m?.upBook?.bestAsk != null && m?.downBook?.bestAsk != null
-                    ? m.upBook.bestAsk + m.downBook.bestAsk
-                    : null,
-                  3,
-                )}
-              </span>
-            </article>
-            <article className="metric-card">
-              <span className="lbl">MATCHED PROFIT</span>
-              <span className="val val-green">
-                {matchedProfit != null ? fmtUsd(matchedProfit) : "—"}
-              </span>
-            </article>
-            <article className="metric-card">
-              <span className="lbl">UNMATCHED EXPOSURE</span>
-              <span className="val">
-                {unmatched === 0 ? "Balanced" : `${unmatched} sh`}
-              </span>
-            </article>
-            <article className="metric-card">
-              <span className="lbl">TRACKED QTY UP / DOWN</span>
-              <span className="val">
-                {upShares} / {downShares}
-              </span>
-            </article>
+          <section className="held-token-row">
+            <HeldTokenStateCard
+              title="UP token — your position"
+              state={heldTokens.up}
+              variant="up"
+            />
+            <HeldTokenStateCard
+              title="DOWN token — your position"
+              state={heldTokens.down}
+              variant="down"
+            />
           </section>
 
           <section className="pnl-row pnl-row-single">
