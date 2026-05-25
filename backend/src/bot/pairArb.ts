@@ -27,20 +27,20 @@ function bookReady(book: OrderBookSnapshot | null | undefined): boolean {
   );
 }
 
-/** buySum = UP bid + DOWN bid (buy signal). */
+/** buySum = UP ask + DOWN ask (buy signal - buying at ask to take liquidity). */
 export function computeBuySum(market: MarketState): number | null {
-  const up = market.upBook;
-  const down = market.downBook;
-  if (up?.bestBid == null || down?.bestBid == null) return null;
-  return up.bestBid + down.bestBid;
-}
-
-/** askSum = UP ask + DOWN ask (dashboard / logs). */
-export function computeAskSum(market: MarketState): number | null {
   const up = market.upBook;
   const down = market.downBook;
   if (up?.bestAsk == null || down?.bestAsk == null) return null;
   return up.bestAsk + down.bestAsk;
+}
+
+/** askSum = UP bid + DOWN bid (dashboard / logs - what we could sell for). */
+export function computeAskSum(market: MarketState): number | null {
+  const up = market.upBook;
+  const down = market.downBook;
+  if (up?.bestBid == null || down?.bestBid == null) return null;
+  return up.bestBid + down.bestBid;
 }
 
 /** @deprecated Use computeBuySum / computeAskSum */
@@ -51,12 +51,12 @@ export function computeDisplaySums(market: MarketState): {
   return { buySum: computeBuySum(market), sellSum: computeAskSum(market) };
 }
 
-/** Min top-of-book bid size for a pair buy (both legs at bid). */
+/** Min top-of-book ask size for a pair buy (both legs at ask). */
 export function computePairBuyQty(market: MarketState): number | null {
   const up = market.upBook;
   const down = market.downBook;
-  if (up?.bestBidSize == null || down?.bestBidSize == null) return null;
-  return Math.min(up.bestBidSize, down.bestBidSize);
+  if (up?.bestAskSize == null || down?.bestAskSize == null) return null;
+  return Math.min(up.bestAskSize, down.bestAskSize);
 }
 
 export function computeBuySize(
@@ -65,10 +65,10 @@ export function computeBuySize(
 ): number {
   const up = market.upBook!;
   const down = market.downBook!;
-  const bidUp = up.bestBid!;
-  const bidDown = down.bestBid!;
-  const bookCap = Math.min(up.bestBidSize!, down.bestBidSize!);
-  const costPerShare = bidUp + bidDown;
+  const askUp = up.bestAsk!;
+  const askDown = down.bestAsk!;
+  const bookCap = Math.min(up.bestAskSize!, down.bestAskSize!);
+  const costPerShare = askUp + askDown;
   const walletCap =
     costPerShare > 0 ? Math.floor(virtualBalanceUsd / costPerShare) : 0;
   const size = Math.floor(
@@ -77,7 +77,7 @@ export function computeBuySize(
   return size >= 1 ? size : 0;
 }
 
-/** Buy when buySum (UP bid + DOWN bid) <= 1 - SLIPPAGE. */
+/** Buy when buySum (UP ask + DOWN ask) <= 1 - SLIPPAGE. */
 export function evaluatePairArb(
   market: MarketState,
   virtualBalanceUsd: number,

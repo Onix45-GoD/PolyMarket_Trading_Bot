@@ -41,6 +41,7 @@ export function resetPairArbTradeState(): void {
 
 /**
  * Execute pair buy when the bot is on and the book shows BUY_PAIR.
+ * Buys at ask prices (taking liquidity) when ask sum <= threshold.
  * May run many times per 5m window; each trade size <= MAX_PAIR_ORDER_SIZE.
  */
 export async function executePairArbDecision(

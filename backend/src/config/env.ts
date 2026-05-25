@@ -38,7 +38,7 @@ const envSchema = z.object({
   /** Min milliseconds between successful pair buys in the same window */
   PAIR_BUY_COOLDOWN_MS: z.coerce.number().default(2000),
   MAX_DAILY_LOSS_USD: z.coerce.number().default(50),
-  /** Buy when buySum (UP bid + DOWN bid) <= 1 - SLIPPAGE */
+  /** Buy when buySum (UP ask + DOWN ask) <= 1 - SLIPPAGE */
   SLIPPAGE: z.coerce.number().default(0.02),
   /** Bot tick interval (ms) */
   BOT_TICK_MS: z.coerce.number().default(1000),
