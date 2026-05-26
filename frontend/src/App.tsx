@@ -300,15 +300,15 @@ export default function App() {
             </p>
             <dl className="signal-dl">
               <div>
-                <dt>Buy sum (bid)</dt>
+                <dt>Buy sum (ask)</dt>
                 <dd>{fmt(pairArb?.buySum, 4)}</dd>
               </div>
               <div>
-                <dt>Ask sum</dt>
+                <dt>Bid sum</dt>
                 <dd>{fmt(pairArb?.askSum, 4)}</dd>
               </div>
               <div>
-                <dt>Pair buy qty (bid)</dt>
+                <dt>Pair buy qty (ask)</dt>
                 <dd>{fmtQty(pairBuyQty)} sh</dd>
               </div>
               <div>
@@ -474,7 +474,7 @@ export default function App() {
                 <>
                   <p className="pnl-big">{fmtUsd(pairPos?.settlementPnl ?? 0)}</p>
                   <p className="pnl-sub">
-                    No open pair · buy UP+DOWN together when buy sum ≤ threshold
+                    No open pair · buy UP+DOWN together when ask sum ≤ threshold
                   </p>
                 </>
               )}
